@@ -5,6 +5,7 @@ import {
   signInWithPopup,
   signOut
 } from 'firebase/auth';
+
 import {  Member } from './data-objects.js'
 
 
@@ -22,7 +23,7 @@ const NAV_TEMPLATE = `
       Sign-out
     </button>
     <button id="sign-in">
-      <i class="material-icons">account_circle</i>Sign-in with Google
+      Sign-in with Google
     </button>
   </div>
 </div>
@@ -76,17 +77,17 @@ function authStateObserver(user) {
 
 function authStateUxUpdate(loggedin) {
   if (loggedin) {
-    $userPic.style.backgroundImage = 'url(' + Member.current.image + ')';
+    // $userPic.style.backgroundImage = 'url(' + Member.current.image + ')';
     //$userName.textContent = Member.current.name;
     //hide($userName);
-    show($userPic);
+    // show($userPic);
     show($signOutButton);
     hide($signInButton);
 
     //saveMessagingDeviceToken();
   } else {
     //show($userName);
-    hide($userPic);
+    // hide($userPic);
     hide($signOutButton);
     show($signInButton);
   }

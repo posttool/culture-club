@@ -6,7 +6,22 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from 'firebase/storage';
-import { updateDoc } from 'firebase/firestore';
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  getDocs,
+  setDoc,
+  updateDoc,
+  doc,
+  getDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { getFirebaseConfig } from './firebase-config.js';
 
 // time formating
@@ -70,13 +85,15 @@ function createCultureForm(e) {
   $$({el: 'button', text: 'Cancel', $parent: $div, click: function() {
     hideModal();
   }});
+
+  showModal($div);
 }
 
 async function createCulture(name, description, file) {
   try {
     const culture = new Culture(name, description,
       !file ? null : LOADING_IMAGE_URL, Member.current);
-    const cDoc = await culture.insert();
+    const cDoc = await culture.save();
     if (file) {
       const filePath = `${getAuth().currentUser.uid}/culture/${cDoc.id}/${file.name}`;
       const newImageRef = ref(getStorage(), filePath);
@@ -92,12 +109,20 @@ async function createCulture(name, description, file) {
   }
 }
 
+function updateFile(cDoc, file, fieldName) {
 
+}
 
 
 // CULTURE PAGE
 
 export async function displayCulture(id) {
+  // get culture
+  const culture = new Culture();
+  await culture.get(id);
+
+  // title
+  document.title = 'Culture: '+culture.name;
 
   // dom
   var $root = $('main-card');
@@ -107,9 +132,6 @@ export async function displayCulture(id) {
   var $addIntro = $$({id: 'add-intro', $parent: $introsPanel});
   var $intros = $$({id: 'intros', $parent: $introsPanel});
 
-  // get culture
-  const culture = new Culture();
-  await culture.get(id);
 
   //  header: name, description, image
   $$({el: 'h2', text: culture.name, $parent: $el });
@@ -133,51 +155,52 @@ export async function displayCulture(id) {
     divFactory($agentCells, displayAgentCell));
 
   // introduce an idea
-  var $div = $$({className: 'twoColumn'}); //TWOCOL with user-pic
-  var $twoCol = twoCol($div);
-  var $form = $$({id: 'intro-form', el: 'form'});
-  var $ta = $$({el: 'textarea', id: 'intro-ta'});
-  $ta.setAttribute('placeholder', 'Introduce an idea');
-  $form.append($ta);
-  // TODO add alt here and other place
-  $twoCol.userPic.innerHTML = '<img src="'+Member.current.image+'" referrerpolicy="no-referrer"/>';
-  $twoCol.col2row1.appendChild($form);
-  var $formButtons = $$({id: 'intro-form-buttons'});
-  $$({el: 'button', text: 'mic', className: 'material-icons lite-bg',
-    $parent: $formButtons, click: function() {
-      let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      let recognition = new SR();
-      $ta.value = 'listening...';
-      recognition.onresult = (event) => {
-        $ta.value = event.results[0][0].transcript;
-        $ta.focus();
-      }
-      recognition.start();
-  }});
-  $$({el: 'button', text: 'post_add', className: 'material-icons lite-bg',
-    $parent: $formButtons, click: function() {
-      alert('add context')
-  }});
-  // TODO handle images/uploads
-  $$({el: 'button', text: 'add_photo_alternate', className: 'material-icons lite-bg',
-    $parent: $formButtons, click: function() {
-      alert('add image')
-  }});
-  $$({className: 'padding', $parent: $formButtons});
-  $$({el: 'button', text: 'Submit', className: 'post-intro-button',
-    $parent: $formButtons, click: function() {
-      if ($ta.value.trim()) {
-        createIntro(culture, $ta.value, null/*upload.input.files[0]*/); //TODO
-      } else {
-        alert('Type something first.')
-      }
-  }});
-  $twoCol.col2row2.appendChild($formButtons);
-  $addIntro.append($div);
+  if (Member.current) {
+    var $div = $$({className: 'twoColumn'}); //TWOCOL with user-pic
+    var $twoCol = twoCol($div);
+    var $form = $$({id: 'intro-form', el: 'form'});
+    var $ta = $$({el: 'textarea', id: 'intro-ta'});
+    $ta.setAttribute('placeholder', 'Introduce an idea');
+    $form.append($ta);
+    // TODO add alt here and other place
+    $twoCol.userPic.innerHTML = '<img src="'+Member.current.image+'" referrerpolicy="no-referrer"/>';
+    $twoCol.col2row1.appendChild($form);
+    var $formButtons = $$({id: 'intro-form-buttons'});
+    $$({el: 'button', text: 'mic', className: 'material-icons lite-bg',
+      $parent: $formButtons, click: function() {
+        let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = new SR();
+        $ta.value = 'listening...';
+        recognition.onresult = (event) => {
+          $ta.value = event.results[0][0].transcript;
+          $ta.focus();
+        }
+        recognition.start();
+    }});
+    $$({el: 'button', text: 'post_add', className: 'material-icons lite-bg',
+      $parent: $formButtons, click: function() {
+        alert('add context')
+    }});
+    // TODO handle images/uploads
+    $$({el: 'button', text: 'add_photo_alternate', className: 'material-icons lite-bg',
+      $parent: $formButtons, click: function() {
+        alert('add image')
+    }});
+    $$({className: 'padding', $parent: $formButtons});
+    $$({el: 'button', text: 'Submit', className: 'post-intro-button',
+      $parent: $formButtons, click: function() {
+        if ($ta.value.trim()) {
+          createIntro(culture, $ta.value, null/*upload.input.files[0]*/); //TODO
+        } else {
+          alert('Type something first.')
+        }
+    }});
+    $twoCol.col2row2.appendChild($formButtons);
+    $addIntro.append($div);
+  }
   //list Introductions
   const intro = new Introduction();
-  await intro.some('culture', '==', culture.path(),
-    divFactory($intros, displayIntroRow));
+  await intro.some('culture', '==', culture.path(), divFactory($intros, displayIntroRow));
 }
 
 function displayAgentCell($listContainer, data, position) {
@@ -209,11 +232,14 @@ function displayIntroRow($listContainer, data, position) {
   var $author = $$({el: 'span', className: 'author', text: '', $parent: $twoCol.col2row1});
   var $time = $$({el: 'span', className: 'time', text: '', $parent: $twoCol.col2row1});
   var $text = $$({el: 'div', className: 'text', text: data.text, $parent: $twoCol.col2row2});
+  var $responses = $$({el: 'div', className: 'responses', text: '0', $parent: $twoCol.col2row2});
+
   getMember(data.member, function(member) {
-    // TODO add alt
-    $twoCol.userPic.innerHTML = '<img src="'+member.image+'" referrerpolicy="no-referrer"/>';
+    $twoCol.userPic.innerHTML = '<img src="'+member.image+'" alt="'+
+      member.name +'" referrerpolicy="no-referrer"/>';
     $author.innerHTML = member.name;
   });
+
   var timestamper = function() {
     if (data.created) {
       $time.innerText = timeAgo.format(data.created.toDate());
@@ -221,13 +247,31 @@ function displayIntroRow($listContainer, data, position) {
   }
   setInterval(timestamper, 1000*60);
   timestamper();
+
+  const c = collection(getFirestore(), 'introduction', data.id, 'response');
+  const q = query(c, orderBy('created', 'asc'));
+  onSnapshot(q,
+    function(snapshot) {
+      snapshot.docChanges().forEach(function(change) {
+        console.log(change.doc.data());
+        if (change.type == 'added') {
+          $responses.innerText = Number($responses.innerText)+1;
+        } else {
+          console.log('intro response removed?')
+        }
+      });
+    }, function(e){
+      console.error('snapshot error '+self._db);
+      console.error(e);
+    });
+
 }
 
 async function createIntro(culture, text, file) {
   try {
     const intro = new Introduction(culture, Member.current, text,
       !file ? null : LOADING_IMAGE_URL, Member.current);
-    const cDoc = await intro.insert();
+    const cDoc = await intro.save();
     if (file) {
       const filePath = `${getAuth().currentUser.uid}/intro/${cDoc.id}/${file.name}`;
       const newImageRef = ref(getStorage(), filePath);
@@ -259,11 +303,11 @@ function agentForm(saveHandler, props = {}) {
   $temp.setAttribute('min', 0)
   $temp.setAttribute('max', 1)
   $temp.setAttribute('step', .1);
-  var $image = $$({el: 'input', type: 'file'});
+  var $image = fileInput(props.image);
   $form.appendChild(labeled('Name', $input));
   $form.appendChild(labeled('Priming', $ta));
   $form.appendChild(labeled('Temp', $temp));
-  $form.appendChild(labeled('Image', $image));
+  $form.appendChild(labeled('Image', $image.div));
   $form.appendChild(labeled('Type', $type));
 
   function validate() {
@@ -282,21 +326,24 @@ function agentForm(saveHandler, props = {}) {
     if (validate()) {
       let type = $type.value();
       let prompt = $ta.value;
-      if (type == 'Responder') {
+      if (type == 'Responder' && dataExample) {
         prompt += dataExample.text;
       }
       // display prompt in console
       $debug.innerHTML = '';
       $$({$parent: $debug, className: 'prompt', text: prompt});
       // get continuation and display
-      const res = await agents.getAgentResponse(text) ;
+      const res = await agents.getAgentResponse(prompt) ;
       $$({$parent: $debug, className: 'response', text: res.choices[0].text});
+      const res2 = await agents.getAgentImage($input.value) ;
+      $$({$parent: $debug, className: 'response'}).innerHTML =
+        '<img src="'+res2.data[0].url+'">';
     }
   }});
   var $submit = $$({el: 'button', text: 'Submit', $parent: $formButtons, click: function() {
     if (validate()) {
       $submit.setAttribute('disabled', 'disabled');
-      saveHandler($input.value, $ta.value, $type.value(), $image.files[0]);
+      saveHandler($input.value, $ta.value, $type.value(), $image.input.files[0]);
     }
   }});
   $$({el: 'button', text: 'Cancel', $parent: $formButtons, click: function() {
@@ -329,7 +376,7 @@ async function createAgent(culture, name, priming, type, file) {
   try {
     const agent = new Agent(culture, Member.current, name, priming, type,
       !file ? null : LOADING_IMAGE_URL);
-    const cDoc = await agent.insert();
+    const cDoc = await agent.save();
     console.log(cDoc)
     if (file) {
       const filePath = `${getAuth().currentUser.uid}/intro/${cDoc.id}/${file.name}`;
@@ -338,6 +385,11 @@ async function createAgent(culture, name, priming, type, file) {
       const publicImageUrl = await getDownloadURL(newImageRef);
       await updateDoc(cDoc,{
         image: publicImageUrl
+      });
+    } else {
+      let publicImageUrl = await agents.getAgentImage(name);
+      await updateDoc(cDoc,{
+        image: publicImageUrl.data[0].url
       });
     }
     hideModal();
@@ -348,20 +400,84 @@ async function createAgent(culture, name, priming, type, file) {
 }
 
 export async function displayAgent(id) {
-    // dom
-    var $root = $('main-card');
+  const agent = new Agent();
+  await agent.get(id);
+  const culture = new Culture();
+  await culture.get(agent.culture);
 
-    // get culture
-    const agent = new Agent();
-    await agent.get(id);
-    var $af = agentForm(function(){}, agent);
-    $root.appendChild($af.root);
-    //  header: name, description, image
-    // $$({el: 'h2', text: agent.name, $parent: $root });
-    // $$({className: 'description', text: agent.priming, $parent: $root });
+  // title
+  document.title = 'Agent: '+agent.name;
+
+  // dom
+  var $root = $('main-card');
+  $$({el: 'h2', text: culture.name, $parent: $root, click: function(){
+    location.href = "culture.html?id="+culture._id;
+  }});
+  var $af = agentForm(async function(name, priming, type, image){
+    agent.name = name;
+    agent.priming = priming;
+    agent.type = type;
+    // agent.image = image;
+    await agent.save();
+  }, agent);
+  $root.appendChild($af.root);
+  //  header: name, description, image
+  // $$({el: 'h2', text: agent.name, $parent: $root });
+  // $$({className: 'description', text: agent.priming, $parent: $root });
 
 }
 
+
+export async function displayIntroduction(id) {
+  const intro = new Introduction();
+  await intro.get(id);
+  const culture = new Culture();
+  await culture.get(intro.culture);
+
+  // title
+  document.title = 'Introduction: '+intro.text;
+
+  // dom
+  var $root = $('main-card');
+  var $header = $$({$parent: $root})
+  var $list = $$({$parent: $root})
+  $$({el: 'h2', text: culture.name, $parent: $header, click: function(){
+    location.href = "culture.html?id="+culture._id;
+  }});
+
+  $$({text: intro.text, $parent: $header});
+
+  const c = collection(getFirestore(), 'introduction', id, 'response');
+  const q = query(c, orderBy('created', 'asc'));
+
+  onSnapshot(q,
+    function(snapshot) {
+      // console.log('ALL '+self._db+' snapshot / ');
+      snapshot.docChanges().forEach(divFactory($list, displayResponseCell));
+    }, function(e){
+      console.error('snapshot error '+self._db);
+      console.error(e);
+    });
+
+
+}
+
+function displayResponseCell($list, data, position) {
+  var $el = $(data.id);
+  if (!$el) {
+    $el = $$({id: data.id, className: 'xxx'});
+    $list.insertBefore($el, $list.children[position]);
+  }
+  $el.innerHTML = data.text;
+}
+
+
+
+
+
+
+
+/////////////////////////////////////////////////////////////////////////
 // utils
 
 function getMember(path, f) {
@@ -482,13 +598,18 @@ function twoCol($el){
 function divId(prefix) {
   return prefix + Math.floor(Math.random()*1000000000000);
 }
-function fileInput() {
+
+function fileInput(imageUrl) {
   var $d = $$();
   var id = divId('fi');
-  var $l = $$({el: 'label', className: 'file-upload', parent: $d});
+  var $l = $$({el: 'label', className: 'file-upload', $parent: $d});
   $l.setAttribute('for', id);
-  var $upload = $$({el: 'input', id: id, type: 'file', parent: $d});
-  hide($upload);
+  var $upload = $$({el: 'input', id: id, type: 'file', $parent: $d});
+//  hide($upload);
+  if (imageUrl) {
+    var $img = $$({el: 'img', $parent: $d});
+    $img.setAttribute('src', imageUrl);
+  }
   return {div: $d, input: $upload};
 }
 

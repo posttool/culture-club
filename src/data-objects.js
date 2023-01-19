@@ -15,6 +15,8 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 
+const LIMIT = 1000;
+
 class DataObject {
 
   constructor(dbName) {
@@ -28,7 +30,7 @@ class DataObject {
         if (map1[key] instanceof DataObject) {
           map2[key] = map1[key].path()
         } else if (key == 'user') {
-          map2[key] = map1[key].email;
+          map2[key] = map1[key].uid;
         } else {
           map2[key] = map1[key];
         }
@@ -40,26 +42,44 @@ class DataObject {
     return this._db + '/' + this._id;
   }
 
-  async insert() {
-    var map = {created: serverTimestamp()};
-    DataObject.copyProps(this, map);
-    try {
-      const docRef = await addDoc(collection(getFirestore(), this._db), map);
-      this.created = docRef.created; //TODO verify
-      return docRef;
-    }
-    catch(error) {
-      console.error('Error writing new '+this._db+' to database', error);
+  async save() {
+    // TODO check update etc
+    if (this.docRef) {
+      console.log("an update");
+      var origData = this.docRef.data();
+      var updateMap = {};
+      for (var p in origData) {
+        if (origData[p] != this[p]) {
+          updateMap[p] = this[p];
+        }
+      }
+      delete updateMap['created'];
+      this.docRef = await updateDoc(doc(getFirestore(), this._db, this._id), updateMap);
+      return this.docRef;
+    } else {
+      var map = {created: serverTimestamp()};
+      DataObject.copyProps(this, map);
+      try {
+        this.docRef = await addDoc(collection(getFirestore(), this._db), map);
+        this.created = this.docRef.created; //TODO verify
+        this._id = this.docRef.id;
+        return this.docRef;
+      }
+      catch(error) {
+        console.error('Error writing new '+this._db+' to database', error);
+      }
     }
   }
 
   async get(id) {
+    if (id.indexOf(this._db) == 0)
+      id = id.substring(this._db.length+1);
     this._id = id;
     const docRef = doc(getFirestore(), this._db, this._id);
     try {
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        var d = docSnap.data();
+      this.docRef = await getDoc(docRef);
+      if (this.docRef.exists()) {
+        var d = this.docRef.data();
         DataObject.copyProps(d, this);
         return d;
       } else {
@@ -75,7 +95,7 @@ class DataObject {
   all(changeHandler) {
     var self = this;
     const c = collection(getFirestore(), self._db);
-    const q = query(c, orderBy('created', 'asc'), limit(20));
+    const q = query(c, orderBy('created', 'asc'), limit(LIMIT));
     if (changeHandler) {
       // let unsubscribe =
       onSnapshot(q,
@@ -95,7 +115,7 @@ class DataObject {
   some(w1, w2, w3, changeHandler) {
     var self = this;
     const c = collection(getFirestore(), self._db);
-    const q = query(c, where(w1, w2, w3), orderBy('created', 'asc'), limit(20));
+    const q = query(c, where(w1, w2, w3), orderBy('created', 'asc'), limit(LIMIT));
     if (changeHandler) {
       // let unsubscribe =
       onSnapshot(q,
@@ -126,7 +146,6 @@ export class Culture extends DataObject {
 
 }
 
-
 //static current
 //static cached
 export class Member extends DataObject {
@@ -139,6 +158,7 @@ export class Member extends DataObject {
       this.email = user.email;
     }
   }
+
   async checkExists() {
     var self = this;
     const q = self.some('email', '==', self.user.email);
@@ -150,40 +170,13 @@ export class Member extends DataObject {
       found = true;
     });
     if (!found) {
-      await this.insert();
+      await this.save();
     }
   }
-
-    /*
-    Name
-    Image
-    Created
-    Last Visit
-    Priming
-    Priming History
-    User (optional)
-    Introductions
-    Beliefs
-    */
 
 }
 
 export class Introduction extends DataObject {
-/*
-Culture
-Member
-Text
-Context
-Flag
-Date and Time
-Response Candidates
-  Member
-  Text
-  Context
-  Adopters
-  Flag
-  Date and Time
-*/
   constructor(culture, member, text, image) {
     super('introduction');
     this.culture = culture;
@@ -196,9 +189,9 @@ Response Candidates
 
 export class Agent extends DataObject {
   constructor(culture, member, name, priming, type, image) {
-    super('agent');
-    this.culture = culture;
-    this.member = member;
+    super('member'); // agent is a type of member
+    this.culture = culture;  //indexed on culture
+    this.member = member; // created by another member
     this.name = name;
     this.priming = priming;
     this.type = type;
