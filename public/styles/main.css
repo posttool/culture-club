@@ -8,45 +8,73 @@
 
 html, body, label, input, textarea, button, input[type='file'] {
   font-family: 'Inter', 'Helvetica', sans-serif;
-}
-h1,h2,h3 {
-  padding: 0;
-  margin: 0;
-}
-label {
-  font-size: 11px;
-  display: block;
-  padding: 18px 0 2px 0;
-  text-transform: uppercase;
+  font-size:16px;
+  line-height: 21px;
 }
 
-input, textarea {
+h1,h2,h3 {
+  padding: 5px 0 18px 0;
+  margin: 0;
+}
+
+input[type='text'], textarea {
   padding: 10px;
   font-size: 18px;
   line-height: 23px;
   width: 100%;
   resize: none;
   box-sizing: border-box;
+  border: 1px solid #ccc;
 }
 
 button {
   border: none;
-  padding: 10px;
   border-radius: 20px;
   background-color: #ff5500;
   font-weight: bold;
+  font-size: 14px;
+  line-height: default;
+  height: 35px;
+  padding: 0 18px 0 18px;
 }
+
 button:hover {
   color: white;
   background-color: #aa1100;
   cursor: pointer;
 }
+
 button.lite-bg {
   background-color: #fff3dd;
   margin-right: 10px;
+  padding: 0 5px 0 5px;
 }
+
 button.lite-bg:hover {
   color: #ff5500;
+}
+
+.modal-layer {
+  position: absolute;
+  top:0;
+  left:0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255,255,255,.23);
+  backdrop-filter: blur(3px);
+}
+.modal-content {
+  background-color: white;
+  border-radius: 20px;
+  width: 70%;
+  height: 70%;
+  margin: 80px auto 0 auto;
+  padding: 20px;
+  box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 35px;
+}
+
+.labeled-input {
+  margin: 0 0 15px 0;
 }
 
 #root-container {
@@ -106,6 +134,7 @@ button.lite-bg:hover {
 }
 
 /*pages*/
+
 .culture-home {
   width: 100%;
   margin: 10px 0 20px 0;
@@ -115,6 +144,70 @@ button.lite-bg:hover {
 .culture-home:hover {
   cursor: pointer;
   background-color: #f7f7f7;
+}
+
+.culture-header {
+  padding: 10px 0 20px 76px;
+}
+
+.culture-description {
+  padding-bottom: 18px;
+}
+
+.agent-container {
+  display: flex;
+  flex-direction: row;
+  font-size: 14px;
+}
+.agent-container .agent {
+  width: 23px;
+  height: 23px;
+  background-color: #ccc;
+  border-radius: 50px;
+  margin: 0 3px 0 0;
+  padding: 0;
+  vertical-align: middle;
+  text-align: center;
+}
+.agent-container .agent:hover {
+  background-color: #111;
+  cursor: pointer;
+}
+.agent-container .label {
+  padding: 0 3px 0 0;
+}
+.agent-container .agent-cells {
+  display: flex;
+  flex-direction: row;
+}
+.agent-container .add-agent {
+  cursor: pointer;
+}
+.agent-container .add-agent:hover {
+  color:#ff5500;
+}
+.agent-console {
+  font-size: 12px;
+  line-height: 16px;
+}
+.agent-console .prompt {
+  color: #333;
+  font-weight: bold;
+  padding: 10px 30px 20px 0;
+}
+.agent-color .response {
+
+}
+#agent-form textarea {
+  height: 120px;
+}
+.agent-buttons {
+  display: flex;
+  flex-direction: row;
+}
+
+.agent-buttons button {
+  margin-right: 5px;
 }
 
 .intro-main {
@@ -135,7 +228,9 @@ button.lite-bg:hover {
 #intro-ta {
   border: none;
   height: 100px;
+  padding: 0;
 }
+
 #intro-ta:focus{
     outline: none;
 }
@@ -152,13 +247,18 @@ button.lite-bg:hover {
 .intro-user-pic {
   position: relative;
   display: inline-block;
-  background-image: url('/images/profile_placeholder.png');
-  background-repeat: no-repeat;
+  /* background-image: url('/images/profile_placeholder.png') ;
+  background-repeat: no-repeat; */
   width: 46px;
   height: 46px;
   background-size: 46px;
   border-radius: 23px;
   margin-top: 10px;
+}
+.intro-user-pic img {
+  border-radius: 50%;
+  width: 46px;
+  height: 46px;
 }
 
 .col2 {
@@ -177,9 +277,10 @@ button.lite-bg:hover {
 }
 
 .col2 .text {
-  font-size:16px;
-  line-height: 21px;
   padding: 8px 13% 20px 0;
+  text-overflow: ellipsis;
+  max-height: 63px;
+  overflow: hidden;
 }
 
 #intro-form-buttons {
@@ -192,8 +293,7 @@ button.lite-bg:hover {
 .padding {
   width: 100%;
 }
-.post-intro-button {
-}
+
 
 .file-upload {
   border: 1px solid #ccc;

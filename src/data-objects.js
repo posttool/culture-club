@@ -192,3 +192,16 @@ Response Candidates
     this.image = image;
   }
 }
+
+
+export class Agent extends DataObject {
+  constructor(culture, member, name, priming, type, image) {
+    super('agent');
+    this.culture = culture;
+    this.member = member;
+    this.name = name;
+    this.priming = priming;
+    this.type = type;
+    this.image = image;
+  }
+}

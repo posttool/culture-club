@@ -4,7 +4,7 @@ import { initializeApp } from 'firebase/app';
 // import { getPerformance } from 'firebase/performance';
 import { getFirebaseConfig } from './firebase-config.js';
 import { initNavigation } from './nav.js';
-import { displayCultures, displayCulture } from './cultures.js';
+import { displayCultures, displayCulture, displayAgent } from './cultures.js';
 
 const firebaseConfig = getFirebaseConfig();
 initializeApp(firebaseConfig);
@@ -17,9 +17,12 @@ switch (document.location.pathname) {
   case '/':
     displayCultures();
     break;
-  case '/culture.html':
-    displayCulture(urlParams.get('id'));
-    break;
+    case '/culture.html':
+      displayCulture(urlParams.get('id'));
+      break;
+    case '/agent.html':
+      displayAgent(urlParams.get('id'));
+      break;
   default:
     console.log('unhandled route '+document.location.pathname);
 }
