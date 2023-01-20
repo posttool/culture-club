@@ -1,11 +1,4 @@
-const DEFAULT_PARAMS = {
-  "model": "text-curie-001",
-  "temperature": 0.2,
-  "max_tokens": 128,
-  "top_p": 1,
-  "frequency_penalty": 0,
-  "presence_penalty": 0
-}
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 const STYLE = [
   'jeff koons',
@@ -15,35 +8,19 @@ const STYLE = [
 ];
 
 export class Agents {
-  constructor(config, params = {...DEFAULT_PARAMS}) {
-    this.openAIKey = config.openAIKey;
-    this.params = params;
+  constructor(functions) {
+    this.testPriming = httpsCallable(functions, 'testPriming');
+    this.testImage = httpsCallable(functions, 'testImage');
   }
 
-  async getAgentResponse(prompt){
-    return query(this.openAIKey, 'completions', {...this.params, 'prompt': prompt});
+  async getAgentResponse(prompt, temperature = 0.2){
+    var res = await this.testPriming({prompt: prompt, temperature: temperature});
+    return res.data;
   }
 
   async getAgentImage(prompt) {
     prompt = prompt + ' ' + STYLE[Math.floor(Math.random()*STYLE.length)];
-    console.log(prompt)
-    return query(this.openAIKey, 'images/generations',
-      {'size': '256x256', 'n': 1, 'prompt': prompt});
+    var res = await this.testImage({prompt: prompt});
+    return res.data;
   }
-}
-
-
-
-export async function query(openai_api_key, path, params) {
-  const requestOptions = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + openai_api_key
-    },
-    body: JSON.stringify(params)
-  };
-  const response = await fetch('https://api.openai.com/v1/' + path, requestOptions);
-  const data = await response.json();
-  return data;
 }

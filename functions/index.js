@@ -1,3 +1,5 @@
+const cors = require('cors');
+
 const {Firestore} = require('@google-cloud/firestore');
 const functions = require("firebase-functions");
 const { defineSecret } = require('firebase-functions/params');
@@ -10,21 +12,37 @@ admin.initializeApp();
 
 const db = admin.firestore();
 
-
-const MAX_AGENTS_PER_INTRO = 100;
-
+// const MAX_AGENTS_PER_INTRO = 100;
 
 exports.helloWorld = functions.https.onRequest((request, response) => {
-  functions.logger.info(functions.firestore);
-  response.send("Hello from XXX!");
+  response.send("Hello  !");
 });
 
-exports.onCreateCulture = functions.firestore.document('/culture/{docId}')
-  .onCreate((change, context) => {
-    functions.logger.info("Hello !!!! - >", change, context);
-    console.log("XXX@@@@")
+
+exports.testPriming =  functions
+  .runWith({ secrets: [openAIApiKey] })
+  .https.onCall(async (data, context) => {
+    var priming = data.priming;
+    var temp = data.temperature;
+    var e = await ___cquery(openAIApiKey.value(), priming, temp);
+    return {text: e.choices[0].text};
   });
 
+exports.testImage = functions
+  .runWith({ secrets: [openAIApiKey] })
+  .https.onCall(async (data, context) => {
+    var prompt = data.prompt;
+    var e = await ___igquery(openAIApiKey.value(), prompt);
+    return {url: e.data[0].url};
+  });
+
+// exports.onCreateCulture = functions.firestore.document('/culture/{docId}')
+//   .onCreate((change, context) => {
+//     functions.logger.info("Hello !!!! - >", change, context);
+//     console.log("XXX@@@@")
+//   });
+
+// When an introduction is created, fire up all the agents...
 exports.onCreateIntroduction = functions
   .runWith({ secrets: [openAIApiKey] })
   .firestore.document('/introduction/{docId}')
@@ -42,9 +60,7 @@ exports.onCreateIntroduction = functions
         var agent = doc.data();
         if (agent.type == 'Responder') {
           ___cquery(openAIApiKey.value(), agent.priming + intro.text).then(function(e){
-            console.log(e);
-            console.log(openAIApiKey)
-            // create a response and add it an array in the intro?
+            // create a response and add it
             const data = {
               created: Firestore.FieldValue.serverTimestamp(),
               member: 'member/'+doc.id,
@@ -54,8 +70,7 @@ exports.onCreateIntroduction = functions
                 rejected: 0
               }
             };
-            console.log(data)
-            // Add a new response to the intro
+            // a sub collection in the introduction
             const res = db
               .collection('introduction')
               .doc(intro.id)
@@ -99,7 +114,23 @@ async function ___cquery(openai_api_key, prompt) {
 }
 
 
-
+async function ___igquery(openai_api_key, prompt) {
+  const requestOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + openai_api_key
+    },
+    body: JSON.stringify({
+      "n": 1,
+      "size": "256x256",
+      "prompt": prompt
+    })
+  };
+  const response = await fetch('https://api.openai.com/v1/images/generations', requestOptions);
+  const data = await response.json();
+  return data;
+}
 
 // sample delete collection https://firebase.google.com/docs/firestore/manage-data/delete-data#node.js_2
 

@@ -2,17 +2,24 @@
 
 import { initializeApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
+
 import { getFirebaseConfig } from './firebase-config.js';
 
 import { initNavigation } from './nav.js';
-import { displayCultures, displayCulture, displayAgent, displayIntroduction } from './cultures.js';
+import { initDisplay, displayCultures, displayCulture, displayAgent, displayIntroduction } from './cultures.js';
 
 const firebaseConfig = getFirebaseConfig();
-initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
+const functions = getFunctions(app);
 initNavigation(firebaseConfig);
+initDisplay(functions);
 
-console.log("CONNECTING TO LOCAL FIRESTORE")
-connectFirestoreEmulator(getFirestore(), 'localhost', 8080);
+if (window.location.hostname.includes("localhost")) {
+  console.log("CONNECTING TO EMULATOR")
+  connectFirestoreEmulator(getFirestore(), 'localhost', 8080);
+  connectFunctionsEmulator(functions, "localhost", 5001);
+}
 
 console.log('init complete '+window.location.pathname);
 const urlParams = new URLSearchParams(window.location.search);

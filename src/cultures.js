@@ -4,6 +4,7 @@ import {
   getStorage,
   ref,
   uploadBytesResumable,
+  uploadBytes,
   getDownloadURL,
 } from 'firebase/storage';
 import {
@@ -37,7 +38,10 @@ const LOADING_IMAGE_URL = 'https://www.google.com/images/spin-32.gif?a';
 import { Agents } from './agents.js'
 import { Culture, Introduction, Member, Agent } from './data-objects.js'
 
-const agents = new Agents(getFirebaseConfig());
+var agents = null;
+export function initDisplay(functions){
+   agents = new Agents(functions);
+}
 
 // HOME PAGE
 export async function displayCultures() {
@@ -46,25 +50,36 @@ export async function displayCultures() {
   var $cultureOptions = $$({id: 'culture-options', $parent: $root});
 
   $$({el: 'button', text: 'Create Culture', $parent: $cultureOptions,
-    click: createCultureForm});
+    click: displayCultureForm});
 
   const culture = new Culture();
-  await culture.all(divFactory($cultureList, displayCultureRow));
+  await culture.all(divFactory($cultureList, factoryCultureCell));
 }
 
-function displayCultureRow($list, data, position) {
+function factoryCultureCell(data) {
   var div = $(data.id);
   if (!div) {
     div = $$({id: data.id, className: 'culture-home'});
     div.onclick = function() {
       document.location.href = '/culture.html?id='+data.id;
     }
-    $list.insertBefore(div, $list.children[position]);
   }
   div.innerHTML = '<b>'+data.name+'</b> '+timeAgo.format(data.created.toDate())+'<br/>'+data.description;
+  return div;
 }
 
-function createCultureForm(e) {
+function displayCultureForm(e) {
+  var $form = cultureForm(
+    function(name, description, file) {
+      createCulture(name, description, file);
+    },
+    function(){
+      hideModal();
+    });
+  showModal($form);
+}
+
+function cultureForm(saveHandler, cancelHandler, props = {}) {
   var $div = $$({});
   var $form = $$({id: 'culture-form', el: 'form', $parent: $div});
   var $input = $$({el: 'input', type: 'text'});
@@ -79,14 +94,14 @@ function createCultureForm(e) {
       alert('Needs name');
       return;
     }
-    createCulture($input.value, $ta.value, $image.files[0]);
+    saveHandler($input.value, $ta.value, $image.files[0]);
   }});
 
   $$({el: 'button', text: 'Cancel', $parent: $div, click: function() {
-    hideModal();
+    cancelHandler();
   }});
 
-  showModal($div);
+  return $div;
 }
 
 async function createCulture(name, description, file) {
@@ -107,10 +122,6 @@ async function createCulture(name, description, file) {
   } catch (error) {
     console.error('There was an error uploading a file to Cloud Storage:', error);
   }
-}
-
-function updateFile(cDoc, file, fieldName) {
-
 }
 
 
@@ -152,7 +163,7 @@ export async function displayCulture(id) {
   // get list of agents for this culture and populate dom
   const agent = new Agent();
   await agent.some('culture', '==', culture.path(),
-    divFactory($agentCells, displayAgentCell));
+    divFactory($agentCells, factoryAgentCell));
 
   // introduce an idea
   if (Member.current) {
@@ -200,55 +211,53 @@ export async function displayCulture(id) {
   }
   //list Introductions
   const intro = new Introduction();
-  await intro.some('culture', '==', culture.path(), divFactory($intros, displayIntroRow));
+  await intro.some('culture', '==', culture.path(), divFactory($intros, factoryIntroCell));
 }
 
-function displayAgentCell($listContainer, data, position) {
-  var $el = $(data.id);
+function factoryAgentCell(agent) {
+  var $el = $(agent.id);
   if (!$el) {
-    $el = $$({id: data.id, className: 'agent'});
+    $el = $$({id: agent.id, className: 'agent'});
     $el.onclick = function() {
-      document.location.href = '/agent.html?id='+data.id;
+      document.location.href = '/agent.html?id='+agent.id;
     }
-    $listContainer.insertBefore($el, $listContainer.children[position]);
   }
+  return $el;
 }
-
 
 var dataExample = null; // TODO convert to something real where agent test can cycle thru examples
 
-function displayIntroRow($listContainer, data, position) {
-  dataExample = data;
-  var $el = $(data.id);
+function factoryIntroCell(intro) {
+  dataExample = intro;
+  var $el = $(intro.id);
   if (!$el) {
-    $el = $$({id: data.id, className: 'intro-main'});
+    $el = $$({id: intro.id, className: 'intro-main'});
     $el.onclick = function() {
-      document.location.href = '/introduction.html?id='+data.id;
+      document.location.href = '/introduction.html?id='+intro.id;
     }
-    $listContainer.insertBefore($el, $listContainer.children[position]);
   }
   $el.innerHTML = '';
   var $twoCol = twoCol($el);
   var $author = $$({el: 'span', className: 'author', text: '', $parent: $twoCol.col2row1});
   var $time = $$({el: 'span', className: 'time', text: '', $parent: $twoCol.col2row1});
-  var $text = $$({el: 'div', className: 'text', text: data.text, $parent: $twoCol.col2row2});
+  var $text = $$({el: 'div', className: 'text', text: intro.text, $parent: $twoCol.col2row2});
   var $responses = $$({el: 'div', className: 'responses', text: '0', $parent: $twoCol.col2row2});
 
-  getMember(data.member, function(member) {
+  getMember(intro.member, function(member) {
     $twoCol.userPic.innerHTML = '<img src="'+member.image+'" alt="'+
       member.name +'" referrerpolicy="no-referrer"/>';
     $author.innerHTML = member.name;
   });
 
   var timestamper = function() {
-    if (data.created) {
-      $time.innerText = timeAgo.format(data.created.toDate());
+    if (intro.created) {
+      $time.innerText = timeAgo.format(intro.created.toDate());
     }
   }
   setInterval(timestamper, 1000*60);
   timestamper();
 
-  const c = collection(getFirestore(), 'introduction', data.id, 'response');
+  const c = collection(getFirestore(), 'introduction', intro.id, 'response');
   const q = query(c, orderBy('created', 'asc'));
   onSnapshot(q,
     function(snapshot) {
@@ -265,6 +274,7 @@ function displayIntroRow($listContainer, data, position) {
       console.error(e);
     });
 
+    return $el;
 }
 
 async function createIntro(culture, text, file) {
@@ -334,10 +344,11 @@ function agentForm(saveHandler, props = {}) {
       $$({$parent: $debug, className: 'prompt', text: prompt});
       // get continuation and display
       const res = await agents.getAgentResponse(prompt) ;
-      $$({$parent: $debug, className: 'response', text: res.choices[0].text});
+      $$({$parent: $debug, className: 'response', text: res.text});
       const res2 = await agents.getAgentImage($input.value) ;
+      console.log(res2)
       $$({$parent: $debug, className: 'response'}).innerHTML =
-        '<img src="'+res2.data[0].url+'">';
+        '<img src="'+res2.url+'">';
     }
   }});
   var $submit = $$({el: 'button', text: 'Submit', $parent: $formButtons, click: function() {
@@ -370,33 +381,40 @@ function createAgentForm(culture) {
     showModal($af.root);
 }
 
-
+async function getBytes(url) {
+  var request = new XMLHttpRequest();
+  request.open('GET', url, false);
+  request.send();
+  if (request.status === 200) {
+    console.log(request)
+    return request.response;
+  } else {
+    throw Error(request);
+  }
+}
 
 async function createAgent(culture, name, priming, type, file) {
-  try {
-    const agent = new Agent(culture, Member.current, name, priming, type,
-      !file ? null : LOADING_IMAGE_URL);
-    const cDoc = await agent.save();
-    console.log(cDoc)
-    if (file) {
-      const filePath = `${getAuth().currentUser.uid}/intro/${cDoc.id}/${file.name}`;
-      const newImageRef = ref(getStorage(), filePath);
-      const fileSnapshot = await uploadBytesResumable(newImageRef, file);
-      const publicImageUrl = await getDownloadURL(newImageRef);
-      await updateDoc(cDoc,{
-        image: publicImageUrl
-      });
-    } else {
-      let publicImageUrl = await agents.getAgentImage(name);
-      await updateDoc(cDoc,{
-        image: publicImageUrl.data[0].url
-      });
-    }
-    hideModal();
-    //location.href = 'culture.html?id='+cDoc.id;
-  } catch (error) {
-    console.error('There was an error uploading a file to Cloud Storage:', error);
+  const agent = new Agent(culture, Member.current, name, priming, type,
+    !file ? null : LOADING_IMAGE_URL);
+  const cDoc = await agent.save();
+  const filePath = `${getAuth().currentUser.uid}/agent/${cDoc.id}`;
+  const newImageRef = ref(getStorage(), filePath);
+  if (file) {
+    console.log('uploading file');
+    const fileSnapshot = await uploadBytesResumable(newImageRef, file);
+  } else {
+    console.log('generating an image');
+    let imageUrl = await agents.getAgentImage(name);
+    console.log('downloading');
+    const bytes = await getBytes(imageUrl.data[0].url);
+    console.log('uploading');
+    const fileSnapshot = await uploadBytes(newImageRef, bytes);
   }
+  const publicImageUrl = await getDownloadURL(newImageRef);
+  await updateDoc(cDoc,{
+    image: publicImageUrl
+  });
+  hideModal();
 }
 
 export async function displayAgent(id) {
@@ -427,7 +445,6 @@ export async function displayAgent(id) {
 
 }
 
-
 export async function displayIntroduction(id) {
   const intro = new Introduction();
   await intro.get(id);
@@ -451,7 +468,7 @@ export async function displayIntroduction(id) {
   const q = query(c, orderBy('created', 'asc'));
   onSnapshot(q,
     function(snapshot) {
-      snapshot.docChanges().forEach(divFactory($list, displayResponseCell));
+      snapshot.docChanges().forEach(divFactory($list, factoryResponseCell));
     }, function(e){
       console.error('snapshot error '+self._db);
       console.error(e);
@@ -459,11 +476,10 @@ export async function displayIntroduction(id) {
 
 }
 
-function displayResponseCell($list, data, position) {
+function factoryResponseCell(data) {
   var $el = $(data.id);
   if (!$el) {
-    $el = $$({id: data.id, className: 'xxx'});
-    $list.insertBefore($el, $list.children[position]);
+    $el = $$({id: data.id, className: 'response-cell twoColumn'});
   }
   $el.innerHTML = '';
   var $twoCol = twoCol($el);
@@ -486,6 +502,7 @@ function displayResponseCell($list, data, position) {
   setInterval(timestamper, 1000*60);
   timestamper();
 
+  return $el;
 }
 
 
@@ -531,7 +548,7 @@ function deleteEl(id) {
     div.parentNode.removeChild(div);
 }
 
-function divFactory($listContainer, displayEl) {
+function divFactory($list, displayEl) {
   var completeOrderedList = []; //{id: , timestamp: }; see next function
   return function(change) {
     if (change.type === 'removed') {
@@ -539,8 +556,11 @@ function divFactory($listContainer, displayEl) {
     } else {
       let doc = change.doc.data();
       doc.id = change.doc.id;
+      let newElement = !$(doc.id);
       let position = insertInList(completeOrderedList, doc, 'created');
-      displayEl($listContainer, doc, position);
+      var $el = displayEl(doc);
+      if (newElement)
+        $list.insertBefore($el, $list.children[position]);
     }
   }
 }
@@ -556,6 +576,7 @@ function insertInList(list, doc, tsFieldName) {
   }
   return i;
 }
+
 function radioGroup(name, values) {
   var $div = $$({});
   for (var i=0; i<values.length; i++) {
