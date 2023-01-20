@@ -21,15 +21,15 @@ switch (document.location.pathname) {
   case '/':
     displayCultures();
     break;
-    case '/culture.html':
-      displayCulture(urlParams.get('id'));
-      break;
-    case '/agent.html':
-      displayAgent(urlParams.get('id'));
-      break;
-    case '/introduction.html':
-      displayIntroduction(urlParams.get('id'));
-      break;
+  case '/culture.html':
+    displayCulture(urlParams.get('id'));
+    break;
+  case '/agent.html':
+    displayAgent(urlParams.get('id'));
+    break;
+  case '/introduction.html':
+    displayIntroduction(urlParams.get('id'));
+    break;
   default:
     console.log('unhandled route '+document.location.pathname);
 }

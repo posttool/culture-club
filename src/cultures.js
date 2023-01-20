@@ -449,16 +449,13 @@ export async function displayIntroduction(id) {
 
   const c = collection(getFirestore(), 'introduction', id, 'response');
   const q = query(c, orderBy('created', 'asc'));
-
   onSnapshot(q,
     function(snapshot) {
-      // console.log('ALL '+self._db+' snapshot / ');
       snapshot.docChanges().forEach(divFactory($list, displayResponseCell));
     }, function(e){
       console.error('snapshot error '+self._db);
       console.error(e);
     });
-
 
 }
 
@@ -468,7 +465,27 @@ function displayResponseCell($list, data, position) {
     $el = $$({id: data.id, className: 'xxx'});
     $list.insertBefore($el, $list.children[position]);
   }
-  $el.innerHTML = data.text;
+  $el.innerHTML = '';
+  var $twoCol = twoCol($el);
+  var $author = $$({el: 'span', className: 'author', text: '', $parent: $twoCol.col2row1});
+  var $time = $$({el: 'span', className: 'time', text: '', $parent: $twoCol.col2row1});
+  var $text = $$({el: 'div', className: 'text', text: data.text, $parent: $twoCol.col2row2});
+  var $responses = $$({el: 'div', className: 'responses', text: '0', $parent: $twoCol.col2row2});
+
+  getMember(data.member, function(member) {
+    $twoCol.userPic.innerHTML = '<img src="'+member.image+'" alt="'+
+      member.name +'" referrerpolicy="no-referrer"/>';
+    $author.innerHTML = member.name;
+  });
+
+  var timestamper = function() {
+    if (data.created) {
+      $time.innerText = timeAgo.format(data.created.toDate());
+    }
+  }
+  setInterval(timestamper, 1000*60);
+  timestamper();
+
 }
 
 

@@ -1,12 +1,16 @@
 const {Firestore} = require('@google-cloud/firestore');
 const functions = require("firebase-functions");
+const { defineSecret } = require('firebase-functions/params');
+const openAIApiKey = defineSecret('OPENAI_API_KEY');
+
+
 // The Firebase Admin SDK to access Firestore.
 const admin = require('firebase-admin');
 admin.initializeApp();
 
 const db = admin.firestore();
 
-const openAIKey = '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';
+
 const MAX_AGENTS_PER_INTRO = 100;
 
 
@@ -21,7 +25,9 @@ exports.onCreateCulture = functions.firestore.document('/culture/{docId}')
     console.log("XXX@@@@")
   });
 
-exports.onCreateIntroduction = functions.firestore.document('/introduction/{docId}')
+exports.onCreateIntroduction = functions
+  .runWith({ secrets: [openAIApiKey] })
+  .firestore.document('/introduction/{docId}')
   .onCreate((change, context) => {
     var intro = change.data();
     intro.id = context.params.docId;
@@ -35,17 +41,20 @@ exports.onCreateIntroduction = functions.firestore.document('/introduction/{docI
     agentQuery.stream().on('data', (doc) => {
         var agent = doc.data();
         if (agent.type == 'Responder') {
-          ___cquery(openAIKey, agent.priming + intro.text).then(function(e){
-            //console.log(e.choices[0].text);
+          ___cquery(openAIApiKey.value(), agent.priming + intro.text).then(function(e){
+            console.log(e);
+            console.log(openAIApiKey)
             // create a response and add it an array in the intro?
             const data = {
               created: Firestore.FieldValue.serverTimestamp(),
+              member: 'member/'+doc.id,
               text: e.choices[0].text,
               stats: {
                 adopted: 0,
                 rejected: 0
               }
             };
+            console.log(data)
             // Add a new response to the intro
             const res = db
               .collection('introduction')
