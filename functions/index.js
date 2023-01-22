@@ -1,5 +1,3 @@
-const cors = require('cors');
-
 const {Firestore} = require('@google-cloud/firestore');
 const functions = require("firebase-functions");
 const { defineSecret } = require('firebase-functions/params');
@@ -11,6 +9,7 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 
 const db = admin.firestore();
+const bucket = admin.storage().bucket();
 
 // const MAX_AGENTS_PER_INTRO = 100;
 
@@ -18,6 +17,15 @@ exports.helloWorld = functions.https.onRequest((request, response) => {
   response.send("Hello  !");
 });
 
+exports.getUrl = functions.https.onCall(async (data, context) => {
+    const options = {
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+    };
+    const [url] = await bucket.file(data).getSignedUrl(options);
+    return url;
+});
 
 exports.testPriming =  functions
   .runWith({ secrets: [openAIApiKey] })
@@ -42,6 +50,31 @@ exports.testImage = functions
 //     console.log("XXX@@@@")
 //   });
 
+exports.onCreateMember = functions
+  .runWith({ secrets: [openAIApiKey] })
+  .firestore.document('/member/{docId}')
+  .onCreate(async (change, context) => {
+    const member = change.data();
+    member.id = context.params.docId;
+    functions.logger.info(member);
+    if (member.priming) {
+      // its an agent
+      if (!member.image) {
+        var prompt = member.name;
+        var e = await ___igquery(openAIApiKey.value(), prompt);
+        let fimg = await fetch(e.data[0].url)
+        let fimgb = Buffer.from(await fimg.arrayBuffer());
+        //copy to storageBucket
+        const filePath = `${member.id}/user-pic.jpg`;
+        const file = await bucket.file(filePath);
+        await file.save(fimgb);
+        return change.ref.set({
+          image: filePath
+        }, {merge: true});
+      }
+    }
+  });
+
 // When an introduction is created, fire up all the agents...
 exports.onCreateIntroduction = functions
   .runWith({ secrets: [openAIApiKey] })
@@ -54,41 +87,98 @@ exports.onCreateIntroduction = functions
     let agentQuery = db.collection('member')
       .where('culture', '==', intro.culture)
       .orderBy('created', 'asc');
-
     // operation could be more durable :D
+    let delay = 0;
     agentQuery.stream().on('data', (doc) => {
-        var agent = doc.data();
-        if (agent.type == 'Responder') {
-          ___cquery(openAIApiKey.value(), agent.priming + intro.text).then(function(e){
-            // create a response and add it
-            const data = {
-              created: Firestore.FieldValue.serverTimestamp(),
-              member: 'member/'+doc.id,
-              text: e.choices[0].text,
-              stats: {
-                adopted: 0,
-                rejected: 0
-              }
-            };
-            // a sub collection in the introduction
-            const res = db
-              .collection('introduction')
-              .doc(intro.id)
-              .collection('response')
-              .add(data);
-
-            res.then(doc => {
-              console.log('inserted agent response '+doc.text);
-            })
-
-          });
-        }
+      delay++;
+      var agent = doc.data();
+      agent.id = doc.id;
+      if (agent.type == 'Responder') {
+        setTimeout(function(){
+          addResponse(openAIApiKey.value(), agent, intro);
+        }, delay * 1000 * 3);
+      }
     }).on('end', () => {
       console.log(`end`);
     });
 
 });
 
+function addResponse(key, agent, intro) {
+  console.log(agent.priming + intro.text);
+  ___cquery(key, agent.priming + intro.text).then(function(e){
+    // create a response and add it
+    const data = {
+      created: Firestore.FieldValue.serverTimestamp(),
+      member: 'member/'+agent.id,
+      text: e.choices[0].text,
+      stats: {
+        adopted: 0,
+        rejected: 0
+      }
+    };
+    // a sub collection in the introduction
+    const res = db
+      .collection('introduction')
+      .doc(intro.id)
+      .collection('response')
+      .add(data);
+
+    res.then(doc => {
+      console.log('inserted agent response '+doc.text);
+    })
+
+  });
+}
+
+
+exports.startPromptingAgentsForCulture = functions.https.onRequest((request, response) => {
+  if (!request.query.id)
+    throw new Error('need id')
+  let cultureId = 'culture/' + request.query.id;
+  let agentQuery = db.collection('member')
+    .where('culture', '==', cultureId)
+    .orderBy('created', 'asc');
+
+    //
+    agentQuery.stream().on('data', (doc) => {
+        let agent = doc.data();
+        let agentId = agent.id = doc.id;
+        if (agent.type == 'Prompter') {
+          addIntro(openAIApiKey.value(), agent);
+        }
+    }).on('end', () => {
+      console.log(`end`);
+    });
+
+  response.send("OK "+request.query.id);
+
+});
+
+function addIntro(key, agent) {
+  ___cquery(key, agent.priming ).then(function(e){
+    // create a response and add it
+    const data = {
+      created: Firestore.FieldValue.serverTimestamp(),
+      member: 'member/' + agent.id,
+      culture: agent.culture,
+      text: e.choices[0].text,
+      stats: {
+        adopted: 0,
+        rejected: 0
+      }
+    };
+    // a sub collection in the introduction
+    const res = db
+      .collection('introduction')
+      .add(data);
+
+    res.then(doc => {
+      console.log('inserted agent  '+doc.text);
+    })
+
+  });
+}
 
 
 async function ___cquery(openai_api_key, prompt) {
@@ -99,8 +189,8 @@ async function ___cquery(openai_api_key, prompt) {
       'Authorization': 'Bearer ' + openai_api_key
     },
     body: JSON.stringify({
-      "model": "text-curie-001",
-      "temperature": 0.2,
+      "model": "text-curie-003",
+      "temperature": 0.35,
       "max_tokens": 128,
       "top_p": 1,
       "frequency_penalty": 0,

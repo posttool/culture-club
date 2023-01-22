@@ -13,8 +13,8 @@ var LOADING_IMAGE_URL = 'https://www.google.com/images/spin-32.gif?a';
 
 const NAV_TEMPLATE = `
 <div id="main-navigation">
-  <div id="home-button">
-    Culture:
+  <div id="home-button" class="nav">
+    Subculture:
   </div>
   <div id="user-container">
     <div  id="user-pic"></div>
@@ -77,17 +77,9 @@ function authStateObserver(user) {
 
 function authStateUxUpdate(loggedin) {
   if (loggedin) {
-    // $userPic.style.backgroundImage = 'url(' + Member.current.image + ')';
-    //$userName.textContent = Member.current.name;
-    //hide($userName);
-    // show($userPic);
     show($signOutButton);
     hide($signInButton);
-
-    //saveMessagingDeviceToken();
   } else {
-    //show($userName);
-    // hide($userPic);
     hide($signOutButton);
     show($signInButton);
   }

@@ -74,7 +74,7 @@ class DataObject {
   async get(id) {
     if (id.indexOf(this._db) == 0)
       id = id.substring(this._db.length+1);
-    this._id = id;
+    this._id = this.id = id; // maybe choose the one without the underscore :)
     const docRef = doc(getFirestore(), this._db, this._id);
     try {
       this.docRef = await getDoc(docRef);
@@ -136,12 +136,12 @@ class DataObject {
 
 
 export class Culture extends DataObject {
-  constructor(name, description, image, member){
+  constructor(member, name, description, image){
     super('culture');
+    this.member = member;
     this.name = name;
     this.description = description;
     this.image = image;
-    this.member = member;
   }
 
 }

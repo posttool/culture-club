@@ -16,12 +16,12 @@ initNavigation(firebaseConfig);
 initDisplay(functions);
 
 if (window.location.hostname.includes("localhost")) {
-  console.log("CONNECTING TO EMULATOR")
+  console.log("USING EMULATOR")
   connectFirestoreEmulator(getFirestore(), 'localhost', 8080);
   connectFunctionsEmulator(functions, "localhost", 5001);
 }
 
-console.log('init complete '+window.location.pathname);
+console.log(window.location.pathname);
 const urlParams = new URLSearchParams(window.location.search);
 
 switch (document.location.pathname) {

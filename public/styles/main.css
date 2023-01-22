@@ -12,9 +12,20 @@ html, body, label, input, textarea, button, input[type='file'] {
   line-height: 21px;
 }
 
-h1,h2,h3 {
+h1 {
   padding: 5px 0 18px 0;
   margin: 0;
+  font-size: 36px;
+}
+h2 {
+  padding: 5px 0 18px 0;
+  margin: 0;
+  font-size: 28px;
+}
+h3 {
+  padding: 5px 0 18px 0;
+  margin: 0;
+  font-size: 18px;
 }
 
 input[type='text'], textarea {
@@ -147,7 +158,7 @@ button.lite-bg:hover {
 }
 
 .culture-header {
-  padding: 10px 0 20px 76px;
+  padding: 10px 0 20px 0;
 }
 
 .culture-description {
@@ -168,13 +179,21 @@ button.lite-bg:hover {
   padding: 0;
   vertical-align: middle;
   text-align: center;
+  overflow:hidden;
 }
+
 .agent-container .agent:hover {
   background-color: #111;
   cursor: pointer;
 }
+
+.agent-container .agent img {
+  width: 25px;
+  height: 25px;
+}
+
 .agent-container .label {
-  padding: 0 3px 0 0;
+  width: 76px;
 }
 .agent-container .agent-cells {
   display: flex;
@@ -210,7 +229,7 @@ button.lite-bg:hover {
   margin-right: 5px;
 }
 
-.intro-main {
+.intro-main, .response-cell {
   display: flex;
   flex-direction: row;
   border-top: 1px solid #ddd;
@@ -247,8 +266,6 @@ button.lite-bg:hover {
 .intro-user-pic {
   position: relative;
   display: inline-block;
-  /* background-image: url('/images/profile_placeholder.png') ;
-  background-repeat: no-repeat; */
   width: 46px;
   height: 46px;
   background-size: 46px;
@@ -294,6 +311,9 @@ button.lite-bg:hover {
   width: 100%;
 }
 
+.response-icon {
+  font-size: 16px;
+}
 
 .file-upload {
   border: 1px solid #ccc;
@@ -302,4 +322,21 @@ button.lite-bg:hover {
   cursor: pointer;
   width: 32px;
   height: 32px;
+}
+
+.nav {
+  cursor: pointer;
+}
+.nav:hover {
+  color: #777;
+}
+
+.responses span {
+  vertical-align: middle;
+  padding-right: 3px;
+}
+
+.intro-home .text {
+  font-size: 24px;
+  line-height: 36px;
 }
