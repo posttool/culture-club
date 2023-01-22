@@ -136,7 +136,7 @@ export async function displayCulture(id) {
 function factoryAgentCell(agent) {
   var $el = $(agent.id);
   if (!$el) {
-    $el = $$({id: agent.id, className: 'agent'});
+    $el = $$({id: agent.id, className: 'agent '+agent.type});
     $el.onclick = function() {
       document.location.href = '/agent.html?id='+agent.id;
     }
@@ -165,18 +165,22 @@ function factoryIntroCell(intro) {
 }
 
 function displayAgentForm(culture) {
-    var $af = agentForm(function(name, priming, type, image){
-      createAgent(culture, name, priming, type, image);
-    });
+  let saveHandler = function(name, priming, type, image){
+    createAgent(culture, name, priming, type, image);
+  };
+  let cancelHandler = function() {
+    hideModel();
+  }
+  var $af = agentForm(saveHandler, cancelHandler);
 
-    // header
-    $$({el: 'h2', text: 'New agent', $parent: $af.header})
+  // header
+  $$({el: 'h2', text: 'New agent', $parent: $af.header})
 
-    // for testing
-    // $af.name.value = 'testing';
-    // $af.priming.value = 'You are an ethicist. You are meant to comment on documents posted on a message board. Here is one: ';
-    // $ta.value = 'You are an ethicist. You are meant to pose provocative statements on an academic message board where you hope to solicit the input of your peers on controversial issues. What is your first post?';
-    showModal($af.root);
+  // for testing
+  // $af.name.value = 'testing';
+  // $af.priming.value = 'You are an ethicist. You are meant to comment on documents posted on a message board. Here is one: ';
+  // $ta.value = 'You are an ethicist. You are meant to pose provocative statements on an academic message board where you hope to solicit the input of your peers on controversial issues. What is your first post?';
+  showModal($af.root);
 }
 
 // AGENT pages
@@ -195,13 +199,17 @@ export async function displayAgent(id) {
   $root.appendChild(backToCulture(culture));
   $$({el: 'h3', text: 'Agent', $parent: $root});
 
-  var $af = agentForm(async function(name, priming, type, image){
+  let saveHandler = async function(name, priming, type, image){
     agent.name = name;
     agent.priming = priming;
     agent.type = type;
     // agent.image = image;
     await agent.save();
-  }, agent);
+  };
+  let cancelHandler = function() {
+    // back to culture?
+  }
+  var $af = agentForm(saveHandler, cancelHandler, agent);
   $root.appendChild($af.root);
 }
 
@@ -271,30 +279,38 @@ function cultureForm(saveHandler, cancelHandler, props = {}) {
   return $div;
 }
 
-function agentForm(saveHandler, props = {}) {
+function agentForm(saveHandler, cancelHandler, props = {}) {
   var $div = $$({});
   var $header = $$({id: 'agent-form-header', $parent: $div});
   var $form = $$({id: 'agent-form', el: 'form', $parent: $div});
   var $formButtons = $$({$parent: $div, className: 'agent-buttons'});
   var $debug = $$({$parent: $div, className: 'agent-console'});
 
-  // init elements
+  // name input
   var $input = $$({el: 'input', type: 'text', value: props.name});
-  var $type = radioGroup('type', ['Responder', 'Prompter'], props.type);
+  $form.appendChild(labeled('Name', $input));
+
+  // textarea for priming
   var $ta = $$({el: 'textarea'});
   if (props.priming)
     $ta.innerText =  props.priming;
+  $form.appendChild(labeled('Priming', $ta));
+
+  // type radio select
+  var $type = radioGroup('type', ['Responder', 'Prompter'], props.type);
+  $form.appendChild(labeled('Type', $type));
+
+  // temperature slider
   var $temp = $$({el: 'input', type: 'range', value: props.temp});
   $temp.setAttribute('min', 0)
   $temp.setAttribute('max', 1)
   $temp.setAttribute('step', .05);
   $temp.setAttribute('value', .35);
-  var $image = fileInput(props.image);
-  $form.appendChild(labeled('Name', $input));
-  $form.appendChild(labeled('Priming', $ta));
   $form.appendChild(labeled('Temp', $temp));
-  $form.appendChild(labeled('Image', $image.div));
-  $form.appendChild(labeled('Type', $type));
+
+  // image area
+  var $image = fileInput(props.image);
+  $form.appendChild($image.div);//(labeled('Image', $image.div));
 
   function validate() {
     if (!$input.value) {
@@ -326,14 +342,17 @@ function agentForm(saveHandler, props = {}) {
         '<img src="'+res2.url+'">';
     }
   }});
-  var $submit = $$({el: 'button', text: 'Submit', $parent: $formButtons, click: function() {
+
+  let saveLabel = props.id ? 'Update' : 'Submit';
+  var $submit = $$({el: 'button', text: saveLabel, $parent: $formButtons, click: function() {
     if (validate()) {
       $submit.setAttribute('disabled', 'disabled');
-      saveHandler($input.value, $ta.value, $type.value(), file.value());
+      saveHandler($input.value, $ta.value, $type.value(), $image.value());
     }
   }});
+
   $$({el: 'button', text: 'Cancel', $parent: $formButtons, click: function() {
-    hideModal();
+    cancelHandler();
   }});
 
   return {root: $div, header: $header, debug: $debug, form: $form, name: $input, priming: $ta}
@@ -407,7 +426,6 @@ async function createAgent(culture, name, priming, type, file) {
   const agent = new Agent(culture, Member.current, name, priming, type, tempFileOrNull(file));
   const cDoc = await agent.save();
   if (file) {
-    console.log('uploading file');
     const filePath = `${getAuth().currentUser.uid}/agent/${cDoc.id}`;
     await saveFileAndUpdateDoc(file, filePath, cDoc);
   }

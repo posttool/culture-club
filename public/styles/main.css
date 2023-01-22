@@ -171,8 +171,8 @@ button.lite-bg:hover {
   font-size: 14px;
 }
 .agent-container .agent {
-  width: 23px;
-  height: 23px;
+  width: 19px;
+  height: 19px;
   background-color: #ccc;
   border-radius: 50px;
   margin: 0 3px 0 0;
@@ -180,16 +180,22 @@ button.lite-bg:hover {
   vertical-align: middle;
   text-align: center;
   overflow:hidden;
+  border: 1.5px solid #333;
 }
 
 .agent-container .agent:hover {
   background-color: #111;
   cursor: pointer;
+  border: 1.5px solid #999;
 }
 
 .agent-container .agent img {
   width: 25px;
   height: 25px;
+}
+
+.agent-container .agent.Prompter {
+  border: 1.5px dotted #000;
 }
 
 .agent-container .label {
