@@ -73,6 +73,7 @@ exports.onCreateMember = functions
         }, {merge: true});
       }
     }
+    return true;
   });
 
 // When an introduction is created, fire up all the agents...
@@ -87,73 +88,95 @@ exports.onCreateIntroduction = functions
     let agentQuery = db.collection('member')
       .where('culture', '==', intro.culture)
       .orderBy('created', 'asc');
-    // operation could be more durable :D
-    let delay = 0;
+
     agentQuery.stream().on('data', (doc) => {
-      delay++;
       var agent = doc.data();
       agent.id = doc.id;
       if (agent.type == 'Responder') {
-        setTimeout(function(){
-          addResponse(openAIApiKey.value(), agent, intro);
-        }, delay * 1000 * 3);
+        ___queue(function(){
+          return addResponse(openAIApiKey.value(), agent, intro);
+        });
       }
     }).on('end', () => {
       console.log(`end`);
+      return true;
     });
 
 });
 
 function addResponse(key, agent, intro) {
   console.log(agent.priming + intro.text);
-  ___cquery(key, agent.priming + intro.text).then(function(e){
-    // create a response and add it
-    const data = {
-      created: Firestore.FieldValue.serverTimestamp(),
-      member: 'member/'+agent.id,
-      text: e.choices[0].text,
-      stats: {
-        adopted: 0,
-        rejected: 0
-      }
-    };
-    // a sub collection in the introduction
-    const res = db
-      .collection('introduction')
-      .doc(intro.id)
-      .collection('response')
-      .add(data);
+  return new Promise((resolve, reject) => {
+    ___cquery(key, agent.priming + intro.text).then(function(e){
+      console.log(e);
+      // create a response and add it
+      const data = {
+        created: Firestore.FieldValue.serverTimestamp(),
+        member: 'member/'+agent.id,
+        text: e.choices[0].text,
+        stats: {
+          adopted: 0,
+          rejected: 0
+        }
+      };
+      // a sub collection in the introduction
+      const res = db
+        .collection('introduction')
+        .doc(intro.id)
+        .collection('response')
+        .add(data);
 
-    res.then(doc => {
-      console.log('inserted agent response '+doc.text);
-    })
-
+      res.then(doc => {
+        console.log('inserted agent response '+doc.text);
+        resolve(doc);
+      });
+    });
   });
 }
 
+exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun((context) => {
+  functions.logger.info('This will be run every 30 seconds!');
+  let cultureQuery = db.collection('culture')
+    .orderBy('created', 'asc');
+
+  agentQuery.stream().on('data', (doc) => {
+    let agent = doc.data();
+    let agentId = agent.id = doc.id;
+    if (agent.type == 'Prompter') {
+      addIntro(openAIApiKey.value(), agent);
+    }
+  }).on('end', () => {
+    console.log(`end`);
+  });
+
+  return true;
+});
 
 exports.startPromptingAgentsForCulture = functions.https.onRequest((request, response) => {
   if (!request.query.id)
     throw new Error('need id')
-  let cultureId = 'culture/' + request.query.id;
+  promptAgents(request.query.id);
+  response.send("OK "+request.query.id);
+});
+
+function promptAgents(cultureId) {
+  if (!cultureId.startsWith('culture/')) {
+    cultureId = 'culture/' + cultureId;
+  }
   let agentQuery = db.collection('member')
     .where('culture', '==', cultureId)
     .orderBy('created', 'asc');
 
-    //
-    agentQuery.stream().on('data', (doc) => {
-        let agent = doc.data();
-        let agentId = agent.id = doc.id;
-        if (agent.type == 'Prompter') {
-          addIntro(openAIApiKey.value(), agent);
-        }
-    }).on('end', () => {
-      console.log(`end`);
-    });
-
-  response.send("OK "+request.query.id);
-
-});
+  agentQuery.stream().on('data', (doc) => {
+    let agent = doc.data();
+    let agentId = agent.id = doc.id;
+    if (agent.type == 'Prompter') {
+      addIntro(openAIApiKey.value(), agent);
+    }
+  }).on('end', () => {
+    console.log(`end`);
+  });
+}
 
 function addIntro(key, agent) {
   ___cquery(key, agent.priming ).then(function(e){
@@ -189,7 +212,7 @@ async function ___cquery(openai_api_key, prompt) {
       'Authorization': 'Bearer ' + openai_api_key
     },
     body: JSON.stringify({
-      "model": "text-curie-003",
+      "model": "text-davinci-003",
       "temperature": 0.35,
       "max_tokens": 128,
       "top_p": 1,
@@ -221,6 +244,34 @@ async function ___igquery(openai_api_key, prompt) {
   const data = await response.json();
   return data;
 }
+
+
+// could be better
+var __q = [];
+var __working = false;
+function ___queue(f){
+  __q.push(f);
+  if (!__working)
+    __checkQ();
+}
+function __checkQ() {
+  if (__q.length ==0) {
+    __working = false;
+    return;
+  }
+  __working = true;
+  var f = __q.pop();
+  f()
+    .then((e)=> {
+      console.log("q finished work with result "+e)
+      __checkQ();
+    })
+    .catch((err) => {
+      console.error(err);
+      __working = false;
+    });;
+}
+
 
 // sample delete collection https://firebase.google.com/docs/firestore/manage-data/delete-data#node.js_2
 
