@@ -94,7 +94,8 @@ exports.onCreateIntroduction = functions
     agentQuery.stream().on('data', (doc) => {
       var agent = doc.data();
       agent.id = doc.id;
-      if (agent.type == 'Responder') {
+      console.log(agent +' '+ intro.member)
+      if (agent.priming[3] && 'member/' + agent.id != intro.member) {
         ___queue(function(){
           return addResponse(openAIApiKey.value(), agent, intro);
         });
@@ -107,10 +108,14 @@ exports.onCreateIntroduction = functions
 });
 
 function addResponse(key, agent, intro) {
-  console.log(agent.priming + intro.text);
   return new Promise((resolve, reject) => {
-    ___cquery(key, agent.priming + intro.text).then(function(e){
-      console.log(e);
+    var context = {
+      author_name: '*',
+      intro_text: intro.text,
+      created: intro.created.toDate().toString()
+    };
+    var prompt = TemplateEngine(agent.priming[0] + agent.priming[2], context);
+    ___cquery(key, prompt).then(function(e){
       // create a response and add it
       const data = {
         created: Firestore.FieldValue.serverTimestamp(),
@@ -129,11 +134,21 @@ function addResponse(key, agent, intro) {
         .add(data);
 
       res.then(doc => {
-        console.log('inserted agent response '+doc.text);
+        console.log(doc);
         resolve(doc);
       });
     });
   });
+}
+
+function TemplateEngine(tpl, data = {}) {
+    var re = /\$\{([^\}]+)?\}/g, match;
+    console.log(re)
+    while(match = re.exec(tpl)) {
+        tpl = tpl.replace(match[0], data[match[1]]);
+        console.log(match[0], match[1])
+    }
+    return tpl;
 }
 
 exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun((context) => {
@@ -178,36 +193,43 @@ function promptAgents(cultureId) {
   agentQuery.stream().on('data', (doc) => {
     let agent = doc.data();
     let agentId = agent.id = doc.id;
-    if (agent.type == 'Prompter') {
-      addIntro(openAIApiKey.value(), agent);
+    if (agent.priming[1]) {
+      ___queue(function() {
+        return addIntro(openAIApiKey.value(), agent);
+      });
     }
+
   }).on('end', () => {
     console.log(`end`);
   });
 }
 
 function addIntro(key, agent) {
-  ___cquery(key, agent.priming ).then(function(e){
-    // create a response and add it
-    const data = {
-      created: Firestore.FieldValue.serverTimestamp(),
-      member: 'member/' + agent.id,
-      culture: agent.culture,
-      text: e.choices[0].text,
-      stats: {
-        adopted: 0,
-        rejected: 0
-      }
-    };
-    // a sub collection in the introduction
-    const res = db
-      .collection('introduction')
-      .add(data);
+  return new Promise((resolve, reject) => {
+    // TODO context?
+    ___cquery(key, agent.priming[0] +' '+ agent.priming[1]).then(function(e){
+      // create a response and add it
+      const data = {
+        created: Firestore.FieldValue.serverTimestamp(),
+        member: 'member/' + agent.id,
+        culture: agent.culture,
+        text: e.choices[0].text,
+        stats: {
+          adopted: 0,
+          rejected: 0
+        }
+      };
+      // a sub collection in the introduction
+      const res = db
+        .collection('introduction')
+        .add(data);
 
-    res.then(doc => {
-      console.log('inserted agent  '+doc.text);
-    })
+      res.then(doc => {
+        console.log(doc);
+        resolve(doc)
+      })
 
+    });
   });
 }
 

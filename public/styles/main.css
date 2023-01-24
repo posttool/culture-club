@@ -42,6 +42,10 @@ input[type='text'], textarea {
   border: 1px solid #ccc;
 }
 
+input[type='text']:focus, textarea:focus{
+    outline: none;
+}
+
 button {
   border: none;
   border-radius: 20px;
@@ -106,15 +110,14 @@ html, body {
   border-right: 1px solid #ddd;
 }
 #root  > .col2 {
-  width: 60%;
+  width: 63%;
   height: 100%;
   border-right: 1px solid #ddd;
   overflow-y: auto;
 }
 #root  > .col3 {
-  width: 30%;
+  width: 27%;
   height: 100%;
-  padding: 20px 50px 20px 20px;
   font-size: 14px;
   line-height: 23px;
   overflow-y: auto;
@@ -186,6 +189,7 @@ html, body {
 .agent-container {
   font-size: 14px;
 }
+
 .agent-container .agent {
   width: 43px;
   height: 43px;
@@ -211,12 +215,9 @@ html, body {
   height: 43px;
 }
 
-.agent-container .agent.Prompter {
-  border: 1.5px dotted #000;
-}
-
 .agent-container .label {
 }
+
 .agent-container .agent-cells {
   /* display: flex;
   flex-direction: row; */
@@ -224,26 +225,45 @@ html, body {
 .agent-container .add-agent {
   cursor: pointer;
   font-size: 50px;
-
 }
 .agent-container .add-agent:hover {
   color:#ff5500;
 }
-.agent-console {
+
+.col3 {
   font-size: 12px;
   line-height: 16px;
 }
-.agent-console .prompt {
+
+.col3 .prompt {
   color: #333;
   font-weight: bold;
-  padding: 10px 30px 20px 0;
+  border-top: 1px solid #ddd;
+  padding: 20px 50px 20px 20px;
 }
-.agent-color .response {
 
+.col3 .response {
+  color: #333;
+  padding: 0 50px 20px 20px;
 }
+
+#agent-form input {
+  border: 0;
+  border-top: 1px solid #ddd;
+}
+
 #agent-form textarea {
-  height: 120px;
+  border: 0;
+  border-top: 1px solid #ddd;
+  height: 250px;
+  padding: 10px 40px 10px 20px;
 }
+
+#agent-form input.agent-name-input {
+  font-size: 24px;
+  padding-left: 20px;
+}
+
 .agent-buttons {
 }
 
@@ -254,6 +274,7 @@ html, body {
 .agent {
   height: 100%;
 }
+
 .agent .twoColumn .col1 {
   width:70%;
 }
@@ -288,9 +309,7 @@ html, body {
   padding: 0;
 }
 
-#intro-ta:focus{
-    outline: none;
-}
+
 
   .twoColumn {
     display: flex;

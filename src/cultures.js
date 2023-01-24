@@ -113,7 +113,7 @@ export async function displayCulture(id) {
   // '<img src="'+culture.image+'" width="64"/>';
 
   //  list of agents
-  var $agentContainer = $$({className: 'agent-container', $parent: $sidebar});
+  var $agentContainer = $$({className: 'agent-container padded', $parent: $sidebar});
   var $agentContainerHeader = $$({$parent: $agentContainer, className: 'agent-container-header'});
   var $agentCells = $$({$parent: $agentContainer, className: 'agent-cells'});
   var $agentButtons = $$({$parent: $agentContainer, className: 'agent-buttons'});
@@ -203,16 +203,29 @@ function factoryIntroCell(intro) {
 
 export async function displayAgent(agentId, cultureId) {
   const agent = new Agent();
-  if (agentId)
+  if (agentId) {
     await agent.get(agentId);
+  }
   const culture = new Culture();
-  if (cultureId == null)
+  if (cultureId == null) {
     cultureId = agent.culture;
+  }
   await culture.get(cultureId);
-  if (!agent.culture)
+  if (!agent.culture) {
     agent.culture = culture;
-  agent.samples = [];
-  agent.culture_name = culture.name;
+  }
+  if (!agent.priming) {
+    agent.priming = [
+      'I am an agent who knows about all kinds of stuff.',
+      'This is a post I wrote: ',
+      'I read a post `${intro_text}` and wrote a response: ',
+      'I read a post `${intro_text}` and a response `${response_text}`. When I read the response to the post I felt: ']
+  }
+  var templateProps = {
+    samples: [],
+    culture_name: culture.name,
+    author_name: 'Karov Venkata'
+  }
 
   const intro = new Introduction();
   await intro.some('culture', '==', culture.path(), function(change){
@@ -235,7 +248,7 @@ export async function displayAgent(agentId, cultureId) {
   document.title = 'Agent: '+agent.name;
 
   // form and console
-  var $af = agentForm(saveHandler, cancelHandler, agent);
+  var $af = agentForm(saveHandler, cancelHandler, agent, templateProps);
   $af.header.appendChild(backToCulture(culture));
 
   $('root').children[1].appendChild($af.root);
@@ -307,22 +320,25 @@ function cultureForm(saveHandler, cancelHandler, props = {}) {
   return $div;
 }
 
-function agentForm(saveHandler, cancelHandler, props = {}) {
+function agentForm(saveHandler, cancelHandler, props = {}, templateProps = {}) {
   var $div = $$({className: 'agent'});
   var $header = $$({$parent: $div, id: 'agent-header'});
   var $form = $$({$parent: $div, id: 'agent-form', el: 'div'});
   var $formButtons = $$({$parent: $div, className: 'agent-buttons'});
-  var $debug = $('root').children[2];
-
-  var $image = fileInput(props.image);
-  $form.appendChild($image.div);//(labeled('Image', $image.div));
+  var $debug = $$({$parent: $('root').children[2]});
 
   // name input
   var $nameRow = $$({className: 'agent-buttons'});
-  var $input = $$({$parent: $nameRow, el: 'input', type: 'text', value: props.name});
+  var $input = $$({$parent: $nameRow, el: 'input', type: 'text', className: 'agent-name-input', value: props.name});
+  $input.setAttribute('placeholder', 'Agent name');
+  var $image = fileInput(props.image);
+  $nameRow.appendChild($image.div);
   var $regen = $$({$parent: $nameRow, el: 'button', text: 'refresh', className: 'material-icons lite-bg',
     click: function(e) {
+      $$({$parent: $debug, className: 'prompt', text: 'Generating proto image for "'+$input.value+'"'});
       services.getAgentImage($input.value).then((res) => {
+        $$({$parent: $debug, className: 'response', text: 'Complete - final results will vary.'});
+        // $debug.scrollTo(0, $debug.scrollHeight);
         $image.img.src = res.url;
       });
     }});
@@ -330,34 +346,37 @@ function agentForm(saveHandler, cancelHandler, props = {}) {
 
   // textarea for priming
   // multiple priming ->
-  //   do/how I post,
-  //   do/how I respond to a post
-  //   do/how i judge a response
+  // convert from old format?
+  if (typeof props.priming == 'string')
+    props.priming = [props.priming, '', '', '']
   var $taRow = $$({className: 'agent-buttons'});
-  var $ta = tabbedTextareaGroup(['Post', 'Respond', 'Judge']);
+  var $ta = tabbedTextareaGroup(['Introduction', 'Post', 'Respond', 'Judge'], props.priming);
   // var $ta = $$({$parent: $taRow, el: 'textarea'});
   $taRow.appendChild($ta.$el);
   // $ta.value = props;
   $$({$parent: $taRow, el: 'button', text: 'start', className: 'material-icons lite-bg',
     click: async function() {
-      let type = $type.value();
+      let prompt = $ta.textareas.value[$ta.tabs.value];
+      if ($ta.tabs.value != 0)
+        prompt = $ta.textareas.value[0] + ' ' +prompt;
       let temp = $temp.value;
-      let prompt = TemplateEngine($ta.value, {
-        culture_name: props.culture.name,
-        intro_text: props.samples.length != 0 ? oneOf(props.samples).text : '',
-        author_name: props.author_name,
-        created: props.created
-      });
-
-      $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+prompt});
-      const res = await services.getAgentResponse(prompt, temp) ;
+      let ctx = {
+        culture_name: templateProps.culture_name,
+        author_name: templateProps.author_name,
+        intro_text: templateProps.samples.length != 0 ? oneOf(props.samples).text : '',
+        created: props.created ? props.created.toDate().toString() : new Date().toString()
+      };
+      let processedPrompt = TemplateEngine(prompt, ctx);
+      $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+processedPrompt});
+      const res = await services.getAgentResponse(processedPrompt, temp) ;
       $$({$parent: $debug, className: 'response', text: res.text});
+      // $debug.scrollTo(0, $debug.scrollHeight);
     }});
   $form.appendChild($taRow);
 
   // type radio select
-  var $type = radioGroup('type', ['Responder', 'Prompter'], props.type);
-  $form.appendChild(labeled('Type', $type));
+  // var $type = radioGroup('type', ['Responder', 'Prompter'], props.type);
+  // $form.appendChild(labeled('Type', $type));
 
   // temperature slider
   var $temp = $$({el: 'input', type: 'range', value: props.temp});
@@ -373,18 +392,18 @@ function agentForm(saveHandler, cancelHandler, props = {}) {
       alert('Needs name');
       return false;
     }
-    if (!$ta.value) {
-      alert('Needs priming');
-      return false;
-    }
+    // if (!$ta.textareas.value) {
+    //   alert('Needs priming');
+    //   return false;
+    // }
     return true;
   }
 
   let saveLabel = props.id ? 'Update' : 'Submit';
   var $submit = $$({el: 'button', text: saveLabel, $parent: $formButtons, click: function() {
     if (validate()) {
-      $submit.setAttribute('disabled', 'disabled');
-      saveHandler($input.value, $ta.value, $type.value(), $temp.value, $image.value());
+      // $submit.setAttribute('disabled', 'disabled');
+      saveHandler($input.value, $ta.textareas.value, 'all', $temp.value, $image.value()); //$type.value()
     }
   }});
 
@@ -617,43 +636,37 @@ function radio(name, value, checked) {
 }
 
 // todo more like this
-function wrapComponent(c, className) {
-  var $el = $elify(c, className);
+function newComponent(className) {
+  var c = {};
+  $elify(c, className);
   eventify(c);
   valuable(c);
-  return $el;
+  return c;
 }
 
-function tabbedTextareaGroup(tabs) {
-  var c = {};
-  var $el = wrapComponent(c, 'textareaGroup');
-  var textareaTabs = tabGroup(tabs);
-  var textareas = textareaGroup(tabs);
-  $el.appendChild(textareaTabs.$el);
-  $el.appendChild(textareas.$el);
-  textareaTabs.on('change', function(index) {
-    textareas.value = index;
+function tabbedTextareaGroup(tabs, priming) {
+  var c = newComponent('textareaGroup');
+  c.tabs = tabGroup(tabs);
+  c.textareas = textareaGroup(tabs);
+  c.$el.appendChild(c.tabs.$el);
+  c.$el.appendChild(c.textareas.$el);
+  c.tabs.on('change', function(index) {
+    c.textareas.show(index);
   });
-  textareaTabs.value = 0;
-  // var $buttons = $$({$parent: $el, className: 'buttons'});
-  //
-  // for (var i=0; i<tabs.length; i++) {
-  //
-  // }
-
+  c.textareas.value = priming;
+  c.tabs.value = 0;
   return c;
 }
 
 function tabGroup(tabs) {
-  var c = {};
-  var $el = wrapComponent(c, 'tabGroup');
+  var c = newComponent('tabGroup');
   var $tabs = [];
   c.update = () => {
     $tabs.forEach(($tab) => { $tab.classList.remove('selected'); });
     $tabs[c.value].classList.add('selected');
   }
   tabs.forEach((tab, index) => {
-    var $tab = $$({$parent: $el, className: 'tab', text: tabs[index],
+    var $tab = $$({$parent: c.$el, className: 'tab', text: tabs[index],
       click: () => {
         c.value = index;
         c.update();
@@ -663,22 +676,33 @@ function tabGroup(tabs) {
   return c;
 }
 
-function textareaGroup(tabs) {
-  var c = {};
-  var $el = wrapComponent(c, 'textareaGroup');
+function textareaGroup(names) {
+  var c = newComponent('textareaGroup');
   var $tas = [];
-  c.update = () => {
+  c.show = (index) => {
     $tas.forEach(($ta) => { hide($ta); });
-    show($tas[c.value]);
+    show($tas[index]);
   }
-  tabs.forEach((tab, index) => {
-    var $ta = $$({$parent: $el, el: 'textarea'});
+  c.update = () => {
+    $tas.forEach(($ta, index) => {
+      if (c._data && c._data[index])
+        $ta.innerText = c._data[index];
+    })
+  }
+  names.forEach((name, index) => {
+    var $ta = $$({$parent: c.$el, el: 'textarea'});
     $ta.setAttribute('placeholder', 'Priming...');
+    $ta.addEventListener('change', (e)=>{
+      c._data[index] = $ta.value;
+      console.log($ta.value)
+    });
     $tas.push($ta);
   });
   return c;
 }
 
+
+// gets pretty bare metal here
 function labeled(label, $input) {
   var $div = $$({className: 'labeled-input'});
   var $label = $$({el: 'label', text: label});
@@ -744,11 +768,11 @@ function hideModal() {
 }
 
 function backToCulture(culture){
-  var $h2 = $$({el: 'h2', className: 'nav', click: function(){
+  var $h2 = $$({el: 'h2', className: 'nav padded', click: function(){
     location.href = "culture.html?id="+culture._id;
   }});
   $$({el: 'span', className: 'material-symbols-outlined', text: 'arrow_back', $parent: $h2});
-  $$({el: 'span', text: culture.name, $parent: $h2});
+  $$({el: 'span', text: ' '+culture.name, $parent: $h2});
   return $h2;
 }
 
@@ -783,7 +807,6 @@ function twoColPost($el, data, countResponses = true) {
   onSnapshot(q,
     function(snapshot) {
       snapshot.docChanges().forEach(function(change) {
-        console.log(change.doc.data());
         if (change.type == 'added') {
           $responseCount.innerText = Number($responseCount.innerText)+1;
         } else {
