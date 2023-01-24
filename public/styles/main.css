@@ -130,6 +130,22 @@ html, body {
   padding: 20px;
 }
 
+.tabGroup {
+  display: flex;
+  flex-direction: row;
+}
+
+.tab {
+  padding: 5px 20px 3px 20px;
+  cursor: pointer;
+}
+.tab:hover {
+  background-color: #ddd;
+}
+.tab.selected {
+  border-bottom: 4px solid #ff5500;
+}
+
 #home-button {
   height: 36px;
   font-size: 32px;
@@ -168,32 +184,31 @@ html, body {
 }
 
 .agent-container {
-  display: flex;
-  flex-direction: row;
   font-size: 14px;
 }
 .agent-container .agent {
-  width: 23px;
-  height: 23px;
+  width: 43px;
+  height: 43px;
   background-color: #ccc;
   border-radius: 50px;
-  margin: 0 3px 0 0;
+  margin: 4px;
   padding: 0;
   vertical-align: middle;
   text-align: center;
   overflow:hidden;
-  border: 1.5px solid #333;
+  border: 2.5px solid #333;
+  float:left;
 }
 
 .agent-container .agent:hover {
   background-color: #111;
   cursor: pointer;
-  border: 1.5px solid #999;
+  border: 2.5px solid #ff5500;
 }
 
 .agent-container .agent img {
-  width: 25px;
-  height: 25px;
+  width: 43px;
+  height: 43px;
 }
 
 .agent-container .agent.Prompter {
@@ -201,14 +216,15 @@ html, body {
 }
 
 .agent-container .label {
-  width: 76px;
 }
 .agent-container .agent-cells {
-  display: flex;
-  flex-direction: row;
+  /* display: flex;
+  flex-direction: row; */
 }
 .agent-container .add-agent {
   cursor: pointer;
+  font-size: 50px;
+
 }
 .agent-container .add-agent:hover {
   color:#ff5500;
@@ -229,8 +245,6 @@ html, body {
   height: 120px;
 }
 .agent-buttons {
-  display: flex;
-  flex-direction: row;
 }
 
 .agent-buttons button {

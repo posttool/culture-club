@@ -114,31 +114,31 @@ export async function displayCulture(id) {
 
   //  list of agents
   var $agentContainer = $$({className: 'agent-container', $parent: $sidebar});
-  $$({className: 'label', text: 'Agents:', $parent: $agentContainer});
+  var $agentContainerHeader = $$({$parent: $agentContainer, className: 'agent-container-header'});
   var $agentCells = $$({$parent: $agentContainer, className: 'agent-cells'});
+  var $agentButtons = $$({$parent: $agentContainer, className: 'agent-buttons'});
 
   if (Member.current) {
-    // create agent button
+
+    $$({$parent: $agentContainerHeader, el: 'h3', text: 'Agent members'});
+    // create agent
     $$({el: 'i', text: 'add_circle', className: 'material-symbols-outlined add-agent',
-      $parent: $agentContainer, click: function() {
+      $parent: $agentButtons, click: function() {
         // displayAgentForm(culture);
         location.href = 'agent.html?culture='+id;
     }});
+    // make agents talk
     $$({el: 'i', text: 'arrow_circle_right', className: 'material-symbols-outlined add-agent',
-      $parent: $agentContainer, click: function() {
+      $parent: $agentButtons, click: function() {
         // displayAgentForm(culture);
           services.startAgents(id);
     }});
+    //  list agents for culture
+    const agent = new Agent();
+    await agent.some('culture', '==', culture.path(),
+      divFactory($agentCells, factoryAgentCell));
 
-  }
-
-  // get list of agents for this culture and draw
-  const agent = new Agent();
-  await agent.some('culture', '==', culture.path(),
-    divFactory($agentCells, factoryAgentCell));
-
-  // introduce an idea
-  if (Member.current) {
+    // introduce an idea
     var $introForm = introForm(function(text, file) {
       createIntro(culture, text, file);
     });
@@ -329,20 +329,26 @@ function agentForm(saveHandler, cancelHandler, props = {}) {
   $form.appendChild($nameRow);
 
   // textarea for priming
+  // multiple priming ->
+  //   do/how I post,
+  //   do/how I respond to a post
+  //   do/how i judge a response
   var $taRow = $$({className: 'agent-buttons'});
-  var $ta = $$({$parent: $taRow, el: 'textarea'});
-  if (props.priming)
-    $ta.innerText =  props.priming;
+  var $ta = tabbedTextareaGroup(['Post', 'Respond', 'Judge']);
+  // var $ta = $$({$parent: $taRow, el: 'textarea'});
+  $taRow.appendChild($ta.$el);
+  // $ta.value = props;
   $$({$parent: $taRow, el: 'button', text: 'start', className: 'material-icons lite-bg',
     click: async function() {
       let type = $type.value();
       let temp = $temp.value;
-      let prompt = TemplateEngine($ta.value,
-        { culture_name: props.culture.name,
-          intro_text: props.samples.length != 0 ? oneOf(props.samples).text : '' });
-      if (type == 'Responder' && props.samples.length != 0) {
-        prompt += oneOf(props.samples).text;
-      }
+      let prompt = TemplateEngine($ta.value, {
+        culture_name: props.culture.name,
+        intro_text: props.samples.length != 0 ? oneOf(props.samples).text : '',
+        author_name: props.author_name,
+        created: props.created
+      });
+
       $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+prompt});
       const res = await services.getAgentResponse(prompt, temp) ;
       $$({$parent: $debug, className: 'response', text: res.text});
@@ -608,6 +614,69 @@ function radio(name, value, checked) {
       }
     }
     return $div
+}
+
+// todo more like this
+function wrapComponent(c, className) {
+  var $el = $elify(c, className);
+  eventify(c);
+  valuable(c);
+  return $el;
+}
+
+function tabbedTextareaGroup(tabs) {
+  var c = {};
+  var $el = wrapComponent(c, 'textareaGroup');
+  var textareaTabs = tabGroup(tabs);
+  var textareas = textareaGroup(tabs);
+  $el.appendChild(textareaTabs.$el);
+  $el.appendChild(textareas.$el);
+  textareaTabs.on('change', function(index) {
+    textareas.value = index;
+  });
+  textareaTabs.value = 0;
+  // var $buttons = $$({$parent: $el, className: 'buttons'});
+  //
+  // for (var i=0; i<tabs.length; i++) {
+  //
+  // }
+
+  return c;
+}
+
+function tabGroup(tabs) {
+  var c = {};
+  var $el = wrapComponent(c, 'tabGroup');
+  var $tabs = [];
+  c.update = () => {
+    $tabs.forEach(($tab) => { $tab.classList.remove('selected'); });
+    $tabs[c.value].classList.add('selected');
+  }
+  tabs.forEach((tab, index) => {
+    var $tab = $$({$parent: $el, className: 'tab', text: tabs[index],
+      click: () => {
+        c.value = index;
+        c.update();
+      }});
+    $tabs.push($tab);
+  });
+  return c;
+}
+
+function textareaGroup(tabs) {
+  var c = {};
+  var $el = wrapComponent(c, 'textareaGroup');
+  var $tas = [];
+  c.update = () => {
+    $tas.forEach(($ta) => { hide($ta); });
+    show($tas[c.value]);
+  }
+  tabs.forEach((tab, index) => {
+    var $ta = $$({$parent: $el, el: 'textarea'});
+    $ta.setAttribute('placeholder', 'Priming...');
+    $tas.push($ta);
+  });
+  return c;
 }
 
 function labeled(label, $input) {

@@ -24,6 +24,9 @@ console.log(window.location.pathname);
 const urlParams = new URLSearchParams(window.location.search);
 
 initNavigation(firebaseConfig, function(member) {
+  $('root').children[1].innerHTML = '';
+  if (!member)
+    $('root').children[2].innerHTML = '';
   switch (document.location.pathname) {
     case '/':
       displayCultures();
