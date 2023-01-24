@@ -12,7 +12,6 @@ import { initDisplay, displayCultures, displayCulture, displayAgent, displayIntr
 const firebaseConfig = getFirebaseConfig();
 const app = initializeApp(firebaseConfig);
 const functions = getFunctions(app);
-initNavigation(firebaseConfig);
 initDisplay(functions);
 
 if (window.location.hostname.includes("localhost")) {
@@ -24,19 +23,21 @@ if (window.location.hostname.includes("localhost")) {
 console.log(window.location.pathname);
 const urlParams = new URLSearchParams(window.location.search);
 
-switch (document.location.pathname) {
-  case '/':
-    displayCultures();
-    break;
-  case '/culture.html':
-    displayCulture(urlParams.get('id'));
-    break;
-  case '/agent.html':
-    displayAgent(urlParams.get('id'));
-    break;
-  case '/introduction.html':
-    displayIntroduction(urlParams.get('id'));
-    break;
-  default:
-    console.log('unhandled route '+document.location.pathname);
-}
+initNavigation(firebaseConfig, function(member) {
+  switch (document.location.pathname) {
+    case '/':
+      displayCultures();
+      break;
+    case '/culture.html':
+      displayCulture(urlParams.get('id'));
+      break;
+    case '/agent.html':
+      displayAgent(urlParams.get('id'), urlParams.get('culture'));
+      break;
+    case '/introduction.html':
+      displayIntroduction(urlParams.get('id'));
+      break;
+    default:
+      console.log('unhandled route '+document.location.pathname);
+  }
+});

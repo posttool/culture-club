@@ -17,21 +17,23 @@ exports.helloWorld = functions.https.onRequest((request, response) => {
   response.send("Hello  !");
 });
 
-exports.getUrl = functions.https.onCall(async (data, context) => {
-    const options = {
-      version: 'v4',
-      action: 'read',
-      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-    };
-    const [url] = await bucket.file(data).getSignedUrl(options);
-    return url;
-});
+// exports.getUrl = functions.https.onCall(async (data, context) => {
+//     const options = {
+//       version: 'v4',
+//       action: 'read',
+//       expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+//     };
+//     const [url] = await bucket.file(data).getSignedUrl(options);
+//     return url;
+// });
 
 exports.testPriming =  functions
   .runWith({ secrets: [openAIApiKey] })
   .https.onCall(async (data, context) => {
-    var priming = data.priming;
+    var priming = data.prompt;
     var temp = data.temperature;
+    console.log(priming+" ..... "+temp);
+    // var culture = db.collection('culture').doc(data.culture)
     var e = await ___cquery(openAIApiKey.value(), priming, temp);
     return {text: e.choices[0].text};
   });
@@ -140,10 +142,11 @@ exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun(
     .orderBy('created', 'asc');
 
   agentQuery.stream().on('data', (doc) => {
-    let agent = doc.data();
-    let agentId = agent.id = doc.id;
-    if (agent.type == 'Prompter') {
-      addIntro(openAIApiKey.value(), agent);
+    let culture = doc.data();
+    culture.id = doc.id;
+    if (culture) {
+      // addIntro(openAIApiKey.value(), agent);
+      functions.logger.info('   '+aculture.name+' wants to hear from its agents!');
     }
   }).on('end', () => {
     console.log(`end`);
@@ -157,6 +160,11 @@ exports.startPromptingAgentsForCulture = functions.https.onRequest((request, res
     throw new Error('need id')
   promptAgents(request.query.id);
   response.send("OK "+request.query.id);
+});
+
+exports.callAgentsForCulture = functions.https.onCall((data, context) => {
+  promptAgents(data);
+  return true;
 });
 
 function promptAgents(cultureId) {

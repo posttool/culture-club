@@ -5,11 +5,15 @@
   'GRAD' 0,
   'opsz' 48
 }
-
-html, body, label, input, textarea, button, input[type='file'] {
+* {
+  box-sizing: border-box;
+}
+html, body, label, input, textarea, button, input[type='file'], h1, h2, h3 {
   font-family: 'Inter', 'Helvetica', sans-serif;
   font-size:16px;
   line-height: 21px;
+  margin: 0;
+  padding: 0;
 }
 
 h1 {
@@ -84,72 +88,73 @@ button.lite-bg:hover {
   box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 35px;
 }
 
-.labeled-input {
-  margin: 0 0 15px 0;
+html, body {
+  height: 100%;
+  margin: 0;
 }
-
-#root-container {
-  margin: 10px 40px 10px 40px;
-}
-
-#main-navigation {
+#root {
   display: flex;
   flex-direction: row;
-  margin: 30px 0 10px 0;
+  height: 100%;
+  overflow:hidden;
+}
+
+#root > .col1 {
+  width: 10%;
+  min-width: 100px;
+  height: 100%;
+  border-right: 1px solid #ddd;
+}
+#root  > .col2 {
+  width: 60%;
+  height: 100%;
+  border-right: 1px solid #ddd;
+  overflow-y: auto;
+}
+#root  > .col3 {
+  width: 30%;
+  height: 100%;
+  padding: 20px 50px 20px 20px;
+  font-size: 14px;
+  line-height: 23px;
+  overflow-y: auto;
+}
+
+.nav-logo {
+  font-size: 80px;
+  color: #ff5500;
+  padding: 20px 0 0 10px;
+}
+
+.padded {
+  padding: 20px;
 }
 
 #home-button {
   height: 36px;
   font-size: 32px;
-  width: 70%;
   cursor: pointer;
 }
 
-#user-container {
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-end;
-  width: 30%;
-  height: 36px;
-  right: 0;
-  padding-left: 10px;
-  padding-right: 10px;
+.login-button {
+  cursor: pointer;
+  margin: auto;
+  position: absolute;
+  bottom: 20px;
+  left: 30px;
+  font-size: 40px;
 }
 
-#user-container .user-pic {
-  display: none;
-  margin-right: 10px;
-}
 
-.user-pic {
-  position: relative;
-  display: inline-block;
-  background-image: url('/images/profile_placeholder.png');
-  background-repeat: no-repeat;
-  width: 36px;
-  height: 36px;
-  background-size: 36px;
-  border-radius: 20px;
-}
-
-#user-container #user-name {
-  font-size: 16px;
-  line-height: 36px;
-  padding-right: 10px;
-  padding-left: 20px;
-  display: none;
-}
-
-#user-container #sign-in {
-  display: none;
-}
 
 /*pages*/
 
 .culture-home {
   width: 100%;
-  margin: 10px 0 20px 0;
+  margin: 0;
+  padding: 20px 60px 40px 20px;
   border-top: 1px solid #ddd;
+  font-size: 23px;
 }
 
 .culture-home:hover {
@@ -157,9 +162,6 @@ button.lite-bg:hover {
   background-color: #f7f7f7;
 }
 
-.culture-header {
-  padding: 10px 0 20px 0;
-}
 
 .culture-description {
   padding-bottom: 18px;
@@ -171,8 +173,8 @@ button.lite-bg:hover {
   font-size: 14px;
 }
 .agent-container .agent {
-  width: 19px;
-  height: 19px;
+  width: 23px;
+  height: 23px;
   background-color: #ccc;
   border-radius: 50px;
   margin: 0 3px 0 0;
@@ -235,6 +237,22 @@ button.lite-bg:hover {
   margin-right: 5px;
 }
 
+.agent {
+  height: 100%;
+}
+.agent .twoColumn .col1 {
+  width:70%;
+}
+
+.agent .twoColumn .col2 {
+  width: 30%;
+  border-left: 1px solid #ccc;
+  margin: 0;
+  padding: 10px;
+  max-height: 70%;
+  overflow-y: scroll;
+}
+
 .intro-main, .response-cell {
   display: flex;
   flex-direction: row;
@@ -260,51 +278,49 @@ button.lite-bg:hover {
     outline: none;
 }
 
-.twoColumn {
-  display: flex;
-  flex-direction: row;
-}
+  .twoColumn {
+    display: flex;
+    flex-direction: row;
+  }
 
-.col1 {
-  width: 76px;
-}
+  .twoColumn > .col1 {
+    width: 96px;
+  }
 
-.intro-user-pic {
-  position: relative;
-  display: inline-block;
-  width: 46px;
-  height: 46px;
-  background-size: 46px;
-  border-radius: 23px;
-  margin-top: 10px;
-}
-.intro-user-pic img {
-  border-radius: 50%;
-  width: 46px;
-  height: 46px;
-}
+  .intro-user-pic {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 46px;
+    background-size: 46px;
+    border-radius: 23px;
+    margin: 10px 0 0 20px;
+  }
+  .intro-user-pic img {
+    border-radius: 50%;
+    width: 46px;
+    height: 46px;
+  }
 
-.col2 {
-  margin: 10px;
-  font-size: 14px;
-  width: 100%;
-}
+  .twoColumn >  .col2 {
+    margin: 10px;
+    font-size: 14px;
+    width: 100%;
+  }
 
-.col2 .author {
-  font-weight: bold;
-}
+  .col2 .author {
+    font-weight: bold;
+  }
 
-.col2 .time {
-  color: #999;
-  padding-left: 4px;
-}
+  .col2 .time {
+    color: #999;
+    padding-left: 4px;
+  }
 
-.col2 .text {
-  padding: 8px 13% 20px 0;
-  text-overflow: ellipsis;
-  max-height: 63px;
-  overflow: hidden;
-}
+  .col2 .text {
+    padding: 8px 13% 20px 0;
+  }
+
 
 #intro-form-buttons {
   display: flex;

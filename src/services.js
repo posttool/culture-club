@@ -11,11 +11,12 @@ export class Services {
   constructor(functions) {
     this.testPriming = httpsCallable(functions, 'testPriming');
     this.testImage = httpsCallable(functions, 'testImage');
+    this.startAgents = httpsCallable(functions, 'callAgentsForCulture');
     this.getUrl = httpsCallable(functions, 'getUrl');
     this.urlCache = {};
   }
 
-  async getAgentResponse(prompt, temperature = 0.2){
+  async getAgentResponse(prompt, temperature = 0.333){
     var res = await this.testPriming({prompt: prompt, temperature: temperature});
     return res.data;
   }
@@ -23,6 +24,11 @@ export class Services {
   async getAgentImage(prompt) {
     prompt = prompt + ' ' + STYLE[Math.floor(Math.random()*STYLE.length)];
     var res = await this.testImage({prompt: prompt});
+    return res.data;
+  }
+
+  async startAgents(cultureId){
+    var res = await this.startAgents({cultureId: cultureId});
     return res.data;
   }
 

@@ -8,23 +8,17 @@ import {
 
 import {  Member } from './data-objects.js'
 
-
-var LOADING_IMAGE_URL = 'https://www.google.com/images/spin-32.gif?a';
-
 const NAV_TEMPLATE = `
 <div id="main-navigation">
-  <div id="home-button" class="nav">
-    Subculture:
-  </div>
   <div id="user-container">
-    <div  id="user-pic"></div>
-    <!-- div  id="user-name"></div -->
-    <button  id="sign-out">
-      Sign-out
-    </button>
-    <button id="sign-in">
-      Sign-in with Google
-    </button>
+    <div id="user-pic"></div>
+    <div  id="user-name"></div>
+    <span id="sign-out" class="material-symbols-outlined login-button">
+      logout
+    </span>
+    <span id="sign-in" class="material-symbols-outlined login-button">
+      login
+    </span>
   </div>
 </div>
 `;
@@ -33,20 +27,20 @@ var $userPic = $el.querySelector('#user-pic');
 var $userName = $el.querySelector('#user-name');
 var $signInButton = $el.querySelector('#sign-in');
 var $signOutButton = $el.querySelector('#sign-out');
-var $homeButton = $el.querySelector('#home-button');
-var $signInSnackbar = document.getElementById('must-signin-snackbar');
 
+var _authStateCallback = null;
 
-export function initNavigation(config) {
+export function initNavigation(config, authStateCallback) {
   initFirebaseAuth();
   Member.cached = {} //keyed by id
-  $('header').append($el);
+  _authStateCallback = authStateCallback;
+  $('root').children[0].append($el);
+  hide($signInButton);
+  hide($signOutButton);
   $signOutButton.addEventListener('click', signOutUser);
   $signInButton.addEventListener('click', signIn);
-  $homeButton.addEventListener('click', function(){
-    location.href = '/';
-  });
 }
+
 
 function initFirebaseAuth() {
   onAuthStateChanged(getAuth(), authStateObserver);
@@ -72,7 +66,11 @@ function authStateObserver(user) {
     var member = Member.current = new Member(user);
     member.checkExists();
   }
+  if (user == null) {
+    member = Member.current = null;
+  }
   authStateUxUpdate(user != null);
+  _authStateCallback(member);
 }
 
 function authStateUxUpdate(loggedin) {

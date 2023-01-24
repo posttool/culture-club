@@ -23,7 +23,7 @@ import {
   getDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { getFirebaseConfig } from './firebase-config.js';
+
 
 // time formating
 import TimeAgo from 'javascript-time-ago'
@@ -32,6 +32,7 @@ TimeAgo.addDefaultLocale(en)
 const timeAgo = new TimeAgo('en-US')
 
 // app constructs
+import { getFirebaseConfig } from './firebase-config.js';
 import { Services } from './services.js'
 import { Culture, Introduction, Member, Agent } from './data-objects.js'
 
@@ -42,15 +43,22 @@ export function initDisplay(functions){
 
 // HOME PAGE
 export async function displayCultures() {
-  var $root = $('main-card');
-  var $cultureList = $$({id: 'culture-list', $parent: $root});
-  var $cultureOptions = $$({id: 'culture-options', $parent: $root});
+  var $root = $('root').children[1];
+  var $div = $$({$parent: $root});
+  if (Member.current) {
+    var $cultureHeader = $$({$parent: $div, className: 'padded'});
+    var $cultureList = $$({$parent: $div, id: 'culture-list'});
+    var $cultureOptions = $$({$parent: $div, id: 'culture-options'});
 
-  $$({el: 'button', text: 'Create Culture', $parent: $cultureOptions,
-    click: displayCultureForm});
+    $$({el: 'h2', text: 'Cultures', $parent: $cultureHeader});
+    $$({el: 'button', text: 'Create Culture', $parent: $cultureOptions,
+      click: displayCultureForm});
 
-  const culture = new Culture();
-  await culture.all(divFactory($cultureList, factoryCultureCell));
+    const culture = new Culture();
+    await culture.all(divFactory($cultureList, factoryCultureCell));
+  } else {
+    $div.appendChild($$({text:'Welcome. Log in at the bottom left corner.'}))
+  }
 }
 
 function factoryCultureCell(data) {
@@ -62,9 +70,9 @@ function factoryCultureCell(data) {
     }
   }
   $el.innerHTML = '';
-  var $name = $$({el:'b', text: data.name, $parent:$el});
-  var $time = $$({el:'span', $parent:$el});
-  var $description = $$({$parent:$el, text: data.description,});
+  var $name = $$({el:'b', text: data.name+' ', $parent:$el});
+  var $time = $$({el:'span', className: 'time', $parent:$el});
+  var $description = $$({$parent:$el, text: data.description});
   if (data.created) {
     $time.innerText = timeAgo.format(data.created.toDate());
   }
@@ -82,8 +90,6 @@ function displayCultureForm() {
 
 // CULTURE PAGE
 
-var dataExample = null; // TODO convert to something real where agent test can cycle thru examples
-
 export async function displayCulture(id) {
   // get culture
   const culture = new Culture();
@@ -93,30 +99,40 @@ export async function displayCulture(id) {
   document.title = 'Culture: '+culture.name;
 
   // dom
-  var $root = $('main-card');
-  var $cultureHeader = $$({id: 'culture-header-container', $parent: $root});
-  var $el = $$({id: id, className: 'culture-header', $parent: $cultureHeader});
+  var $root = $('root').children[1];
+  var $sidebar = $('root').children[2];
+
+  var $header = $$({id: id, className: 'culture-header padded', $parent: $root});
   var $introsPanel = $$({id: 'intros-panel', $parent: $root});
   var $addIntro = $$({id: 'add-intro', $parent: $introsPanel});
   var $intros = $$({id: 'intros', $parent: $introsPanel});
 
   //  header: name, description, image
-  $$({el: 'h2', text: culture.name, $parent: $el });
-  $$({className: 'culture-description', text: culture.description, $parent: $el });
+  $$({el: 'h2', text: culture.name, $parent: $header });
+  $$({className: 'culture-description', text: culture.description, $parent: $header });
   // '<img src="'+culture.image+'" width="64"/>';
 
-  // dom for list of agents
-  var $agentContainer = $$({className: 'agent-container', $parent: $el});
+  //  list of agents
+  var $agentContainer = $$({className: 'agent-container', $parent: $sidebar});
   $$({className: 'label', text: 'Agents:', $parent: $agentContainer});
   var $agentCells = $$({$parent: $agentContainer, className: 'agent-cells'});
 
-  // create agent button
-  $$({el: 'i', text: 'add_circle', className: 'material-symbols-outlined add-agent',
-    $parent: $agentContainer, click: function() {
-      displayAgentForm(culture);
-  }});
+  if (Member.current) {
+    // create agent button
+    $$({el: 'i', text: 'add_circle', className: 'material-symbols-outlined add-agent',
+      $parent: $agentContainer, click: function() {
+        // displayAgentForm(culture);
+        location.href = 'agent.html?culture='+id;
+    }});
+    $$({el: 'i', text: 'arrow_circle_right', className: 'material-symbols-outlined add-agent',
+      $parent: $agentContainer, click: function() {
+        // displayAgentForm(culture);
+          services.startAgents(id);
+    }});
 
-  // get list of agents for this culture and populate dom
+  }
+
+  // get list of agents for this culture and draw
   const agent = new Agent();
   await agent.some('culture', '==', culture.path(),
     divFactory($agentCells, factoryAgentCell));
@@ -128,6 +144,7 @@ export async function displayCulture(id) {
     });
     $addIntro.append($introForm);
   }
+
   //list Introductions
   const intro = new Introduction();
   await intro.some('culture', '==', culture.path(), divFactory($intros, factoryIntroCell));
@@ -150,10 +167,9 @@ function factoryAgentCell(agent) {
 }
 
 function factoryIntroCell(intro) {
-  dataExample = intro;
   var $el = $(intro.id);
   if (!$el) {
-    $el = $$({id: intro.id, className: 'intro-main'});
+    $el = $$({id: intro.id, className: 'intro-main twoColumn'});
     $el.onclick = function() {
       document.location.href = '/introduction.html?id='+intro.id;
     }
@@ -164,53 +180,65 @@ function factoryIntroCell(intro) {
     return $el;
 }
 
-function displayAgentForm(culture) {
-  let saveHandler = function(name, priming, type, image){
-    createAgent(culture, name, priming, type, image);
-  };
-  let cancelHandler = function() {
-    hideModel();
-  }
-  var $af = agentForm(saveHandler, cancelHandler);
-
-  // header
-  $$({el: 'h2', text: 'New agent', $parent: $af.header})
-
-  // for testing
-  // $af.name.value = 'testing';
-  // $af.priming.value = 'You are an ethicist. You are meant to comment on documents posted on a message board. Here is one: ';
-  // $ta.value = 'You are an ethicist. You are meant to pose provocative statements on an academic message board where you hope to solicit the input of your peers on controversial issues. What is your first post?';
-  showModal($af.root);
-}
+// function displayAgentForm(culture) {
+//   let saveHandler = function(name, priming, type, temp, image){
+//     createAgent(culture, name, priming, type, temp, image);
+//   };
+//   let cancelHandler = function() {
+//     hideModel();
+//   }
+//   var $af = agentForm(saveHandler, cancelHandler);
+//
+//   // header
+//   $$({el: 'h2', text: 'New agent', $parent: $af.header})
+//
+//   // for testing
+//   // $af.name.value = 'testing';
+//   // $af.priming.value = 'You are an ethicist. You are meant to comment on documents posted on a message board. Here is one: ';
+//   // $ta.value = 'You are an ethicist. You are meant to pose provocative statements on an academic message board where you hope to solicit the input of your peers on controversial issues. What is your first post?';
+//   showModal($af.root);
+// }
 
 // AGENT pages
 
-export async function displayAgent(id) {
+export async function displayAgent(agentId, cultureId) {
   const agent = new Agent();
-  await agent.get(id);
+  if (agentId)
+    await agent.get(agentId);
   const culture = new Culture();
-  await culture.get(agent.culture);
+  if (cultureId == null)
+    cultureId = agent.culture;
+  await culture.get(cultureId);
+  if (!agent.culture)
+    agent.culture = culture;
+  agent.samples = [];
+  agent.culture_name = culture.name;
 
-  // title
-  document.title = 'Agent: '+agent.name;
+  const intro = new Introduction();
+  await intro.some('culture', '==', culture.path(), function(change){
+    agent.samples.push(change.doc.data());
+  });
 
-  //
-  var $root = $('main-card');
-  $root.appendChild(backToCulture(culture));
-  $$({el: 'h3', text: 'Agent', $parent: $root});
-
-  let saveHandler = async function(name, priming, type, image){
+  let saveHandler = async function(name, priming, type, temp, image) {
     agent.name = name;
     agent.priming = priming;
     agent.type = type;
+    agent.temperature = temp;
     // agent.image = image;
     await agent.save();
   };
   let cancelHandler = function() {
     // back to culture?
   }
+
+  // title
+  document.title = 'Agent: '+agent.name;
+
+  // form and console
   var $af = agentForm(saveHandler, cancelHandler, agent);
-  $root.appendChild($af.root);
+  $af.header.appendChild(backToCulture(culture));
+
+  $('root').children[1].appendChild($af.root);
 }
 
 export async function displayIntroduction(id) {
@@ -223,7 +251,7 @@ export async function displayIntroduction(id) {
   document.title = 'Introduction: '+intro.text;
 
   //
-  var $root = $('main-card');
+  var $root = $('root').children[1];
   var $header = $$({$parent: $root})
   var $intro = $$({$parent: $root, className: 'twoColumn intro-home'})
   var $list = $$({$parent: $root})
@@ -280,21 +308,46 @@ function cultureForm(saveHandler, cancelHandler, props = {}) {
 }
 
 function agentForm(saveHandler, cancelHandler, props = {}) {
-  var $div = $$({});
-  var $header = $$({id: 'agent-form-header', $parent: $div});
-  var $form = $$({id: 'agent-form', el: 'form', $parent: $div});
+  var $div = $$({className: 'agent'});
+  var $header = $$({$parent: $div, id: 'agent-header'});
+  var $form = $$({$parent: $div, id: 'agent-form', el: 'div'});
   var $formButtons = $$({$parent: $div, className: 'agent-buttons'});
-  var $debug = $$({$parent: $div, className: 'agent-console'});
+  var $debug = $('root').children[2];
+
+  var $image = fileInput(props.image);
+  $form.appendChild($image.div);//(labeled('Image', $image.div));
 
   // name input
-  var $input = $$({el: 'input', type: 'text', value: props.name});
-  $form.appendChild(labeled('Name', $input));
+  var $nameRow = $$({className: 'agent-buttons'});
+  var $input = $$({$parent: $nameRow, el: 'input', type: 'text', value: props.name});
+  var $regen = $$({$parent: $nameRow, el: 'button', text: 'refresh', className: 'material-icons lite-bg',
+    click: function(e) {
+      services.getAgentImage($input.value).then((res) => {
+        $image.img.src = res.url;
+      });
+    }});
+  $form.appendChild($nameRow);
 
   // textarea for priming
-  var $ta = $$({el: 'textarea'});
+  var $taRow = $$({className: 'agent-buttons'});
+  var $ta = $$({$parent: $taRow, el: 'textarea'});
   if (props.priming)
     $ta.innerText =  props.priming;
-  $form.appendChild(labeled('Priming', $ta));
+  $$({$parent: $taRow, el: 'button', text: 'start', className: 'material-icons lite-bg',
+    click: async function() {
+      let type = $type.value();
+      let temp = $temp.value;
+      let prompt = TemplateEngine($ta.value,
+        { culture_name: props.culture.name,
+          intro_text: props.samples.length != 0 ? oneOf(props.samples).text : '' });
+      if (type == 'Responder' && props.samples.length != 0) {
+        prompt += oneOf(props.samples).text;
+      }
+      $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+prompt});
+      const res = await services.getAgentResponse(prompt, temp) ;
+      $$({$parent: $debug, className: 'response', text: res.text});
+    }});
+  $form.appendChild($taRow);
 
   // type radio select
   var $type = radioGroup('type', ['Responder', 'Prompter'], props.type);
@@ -308,9 +361,6 @@ function agentForm(saveHandler, cancelHandler, props = {}) {
   $temp.setAttribute('value', .35);
   $form.appendChild(labeled('Temp', $temp));
 
-  // image area
-  var $image = fileInput(props.image);
-  $form.appendChild($image.div);//(labeled('Image', $image.div));
 
   function validate() {
     if (!$input.value) {
@@ -324,40 +374,36 @@ function agentForm(saveHandler, cancelHandler, props = {}) {
     return true;
   }
 
-  $$({el: 'button', text: 'Test', $parent: $formButtons, click: async function() {
-    if (validate()) {
-      let type = $type.value();
-      let prompt = $ta.value;
-      if (type == 'Responder' && dataExample) {
-        prompt += dataExample.text;
-      }
-      // display prompt in console
-      $debug.innerHTML = '';
-      $$({$parent: $debug, className: 'prompt', text: prompt});
-      // get continuation and display
-      const res = await services.getAgentResponse(prompt) ;
-      $$({$parent: $debug, className: 'response', text: res.text});
-      const res2 = await services.getAgentImage($input.value) ;
-      $$({$parent: $debug, className: 'response'}).innerHTML =
-        '<img src="'+res2.url+'">';
-    }
-  }});
-
   let saveLabel = props.id ? 'Update' : 'Submit';
   var $submit = $$({el: 'button', text: saveLabel, $parent: $formButtons, click: function() {
     if (validate()) {
       $submit.setAttribute('disabled', 'disabled');
-      saveHandler($input.value, $ta.value, $type.value(), $image.value());
+      saveHandler($input.value, $ta.value, $type.value(), $temp.value, $image.value());
     }
   }});
 
-  $$({el: 'button', text: 'Cancel', $parent: $formButtons, click: function() {
-    cancelHandler();
-  }});
+  // $$({el: 'button', text: 'Cancel', $parent: $formButtons, click: function() {
+  //   cancelHandler();
+  // }});
 
   return {root: $div, header: $header, debug: $debug, form: $form, name: $input, priming: $ta}
 
 }
+
+function TemplateEngine(tpl, data = {}) {
+    var re = /\$\{([^\}]+)?\}/g, match;
+    console.log(re)
+    while(match = re.exec(tpl)) {
+        tpl = tpl.replace(match[0], data[match[1]]);
+        console.log(match[0], match[1])
+    }
+    return tpl;
+}
+
+function oneOf(a) {
+  return a[Math.floor(Math.random()*a.length)];
+}
+
 
 function introForm(saveHandler) {
   var $div = $$({className: 'twoColumn'}); //TWOCOL with user-pic
@@ -413,7 +459,8 @@ function tempFileOrNull(file) {
 }
 
 async function createCulture(name, description, file) {
-  const culture = new Culture(Member.current, name, description, tempFileOrNull(file));
+  const culture = new Culture(Member.current, name, description,
+    tempFileOrNull(file));
   const cDoc = await culture.save();
   if (file) {
     const filePath = `${getAuth().currentUser.uid}/culture/${cDoc.id}/${file.name}`;
@@ -422,8 +469,9 @@ async function createCulture(name, description, file) {
   location.href = 'culture.html?id='+cDoc.id;
 }
 
-async function createAgent(culture, name, priming, type, file) {
-  const agent = new Agent(culture, Member.current, name, priming, type, tempFileOrNull(file));
+async function createAgent(culture, name, priming, temperature, temp, file) {
+  const agent = new Agent(culture, Member.current, name, priming, type,
+    temperature, tempFileOrNull(file));
   const cDoc = await agent.save();
   if (file) {
     const filePath = `${getAuth().currentUser.uid}/agent/${cDoc.id}`;
@@ -433,7 +481,8 @@ async function createAgent(culture, name, priming, type, file) {
 }
 
 async function createIntro(culture, text, file) {
-  const intro = new Introduction(culture, Member.current, text, tempFileOrNull(file));
+  const intro = new Introduction(culture, Member.current, text,
+    tempFileOrNull(file));
   const cDoc = await intro.save();
   if (file) {
     const filePath = `${getAuth().currentUser.uid}/intro/${cDoc.id}/${file.name}`;
@@ -583,6 +632,8 @@ function divId(prefix) {
 }
 
 function fileInput(imageUrl) {
+  if (!imageUrl)
+    imageUrl = 'https://www.ipcc.ch/site/assets/uploads/sites/3/2019/10/img-placeholder.png';
   var $d = $$();
   // var id = divId('fi');
   // var $l = $$({el: 'label', className: 'file-upload', $parent: $d});
@@ -595,8 +646,9 @@ function fileInput(imageUrl) {
     //   $img.setAttribute('src', fullUrl);
     // })
     $img.setAttribute('src', getStorageUrl(imageUrl));
+    $img.setAttribute('height', '256');
   }
-  return {div: $d, input: null, value: function(){ return null; }}; //$upload
+  return {div: $d, input: null, img: $img, value: function(){ return null; }}; //$upload
 }
 
 function getStorageUrl(path) {

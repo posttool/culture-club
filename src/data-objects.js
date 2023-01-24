@@ -43,7 +43,6 @@ class DataObject {
   }
 
   async save() {
-    // TODO check update etc
     if (this.docRef) {
       console.log("an update");
       var origData = this.docRef.data();
@@ -59,15 +58,10 @@ class DataObject {
     } else {
       var map = {created: serverTimestamp()};
       DataObject.copyProps(this, map);
-      try {
-        this.docRef = await addDoc(collection(getFirestore(), this._db), map);
-        this.created = this.docRef.created; //TODO verify
-        this._id = this.docRef.id;
-        return this.docRef;
-      }
-      catch(error) {
-        console.error('Error writing new '+this._db+' to database', error);
-      }
+      this.docRef = await addDoc(collection(getFirestore(), this._db), map);
+      this.created = this.docRef.created; //TODO verify
+      this._id = this.docRef.id;
+      return this.docRef;
     }
   }
 
