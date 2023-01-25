@@ -46,6 +46,11 @@ exports.testImage = functions
     return {url: e.data[0].url};
   });
 
+// exports.onCreateCulture = functions.firestore.document('/culture/{docId}')
+//   .onCreate((change, context) => {
+//     functions.logger.info("Hello !!!! - >", change, context);
+//     console.log("XXX@@@@")
+//   });
 
 exports.onCreateMember = functions
   .runWith({ secrets: [openAIApiKey] })
@@ -140,6 +145,10 @@ function addResponse(key, agent, intro) {
     };
     var prompt = TemplateEngine(agent.priming[0] + agent.priming[2], context);
     ___cquery(key, prompt).then(function(e){
+      if (e.error) {
+        reject(e);
+        return;
+      }
       // create a response and add it
       const data = {
         created: Firestore.FieldValue.serverTimestamp(),
@@ -175,6 +184,10 @@ function addResponseJudgement(key, agent, intro, response) {
     };
     var prompt = TemplateEngine(agent.priming[0] + agent.priming[3], context);
     ___cquery(key, prompt).then(function(e){
+      if (e.error) {
+        reject(e);
+        return;
+      }
       // create a response and add it
       const data = {
         created: Firestore.FieldValue.serverTimestamp(),
@@ -268,6 +281,10 @@ function addIntro(key, agent) {
   return new Promise((resolve, reject) => {
     // TODO context?
     ___cquery(key, agent.priming[0] +' '+ agent.priming[1]).then(e => {
+      if (e.error) {
+        reject(e);
+        return;
+      }
       // create a response and add it
       const data = {
         created: Firestore.FieldValue.serverTimestamp(),
@@ -312,6 +329,10 @@ async function ___cquery(openai_api_key, prompt) {
   };
   const response = await fetch('https://api.openai.com/v1/completions', requestOptions);
   const data = await response.json();
+  if (data.error) {
+    console.log("ERROR");
+    console.log(data.error);
+  }
   return data;
 }
 
@@ -352,12 +373,14 @@ function __checkQ() {
   var f = __q.pop();
   f()
     .then((e)=> {
-      console.log("q finished work with result "+e)
+      console.log("q finished work  ")
+      // console.log(e)
       __checkQ();
     })
     .catch((err) => {
+      console.log("Q ERROR")
       console.error(err);
-      __working = false;
+      __checkQ();
     });;
 }
 
