@@ -46,11 +46,6 @@ exports.testImage = functions
     return {url: e.data[0].url};
   });
 
-// exports.onCreateCulture = functions.firestore.document('/culture/{docId}')
-//   .onCreate((change, context) => {
-//     functions.logger.info("Hello !!!! - >", change, context);
-//     console.log("XXX@@@@")
-//   });
 
 exports.onCreateMember = functions
   .runWith({ secrets: [openAIApiKey] })
@@ -94,18 +89,47 @@ exports.onCreateIntroduction = functions
     agentQuery.stream().on('data', (doc) => {
       var agent = doc.data();
       agent.id = doc.id;
-      console.log(agent +' '+ intro.member)
       if (agent.priming[3] && 'member/' + agent.id != intro.member) {
-        ___queue(function(){
+        ___queue(function() {
           return addResponse(openAIApiKey.value(), agent, intro);
         });
       }
     }).on('end', () => {
-      console.log(`end`);
       return true;
     });
-
 });
+
+exports.onCreateResponse = functions
+  .runWith({ secrets: [openAIApiKey] })
+  .firestore.document('/introduction/{introId}/response/{responseId}')
+  .onCreate((change, context) => {
+    var response = change.data();
+    response.id = context.params.responseId;
+    const intro = db
+      .collection('introduction')
+      .doc(context.params.introId).get().then((e)=>{
+        let intro = e.data();
+        intro.id = e.id;
+
+        let agentQuery = db.collection('member')
+          .where('culture', '==', intro.culture)
+          .orderBy('created', 'asc');
+
+        agentQuery.stream().on('data', (doc) => {
+          var agent = doc.data();
+          agent.id = doc.id;
+          if (agent.priming[3] && 'member/' + agent.id != response.member) {
+            ___queue(function() {
+              return addResponseJudgement(openAIApiKey.value(), agent, intro, response);
+            });
+          }
+        }).on('end', () => {
+          return true;
+        });
+
+      });
+});
+
 
 function addResponse(key, agent, intro) {
   return new Promise((resolve, reject) => {
@@ -134,7 +158,44 @@ function addResponse(key, agent, intro) {
         .add(data);
 
       res.then(doc => {
-        console.log(doc);
+        resolve(doc);
+      });
+    });
+  });
+}
+
+
+function addResponseJudgement(key, agent, intro, response) {
+  return new Promise((resolve, reject) => {
+    var context = {
+      author_name: '*',
+      intro_text: intro.text,
+      response_text: response.text,
+      created: response.created.toDate().toString()
+    };
+    var prompt = TemplateEngine(agent.priming[0] + agent.priming[3], context);
+    ___cquery(key, prompt).then(function(e){
+      // create a response and add it
+      const data = {
+        created: Firestore.FieldValue.serverTimestamp(),
+        member: 'member/'+agent.id,
+        text: e.choices[0].text,
+        stats: {
+          adopted: 0,
+          rejected: 0
+        }
+      };
+      // a sub collection in the introduction
+      const res = db
+        .collection('introduction')
+        .doc(intro.id)
+        .collection('response')
+        .doc(response.id)
+        .collection('response')
+        .add(data);
+
+      res.then(doc => {
+        // console.log(doc)
         resolve(doc);
       });
     });
@@ -143,7 +204,6 @@ function addResponse(key, agent, intro) {
 
 function TemplateEngine(tpl, data = {}) {
     var re = /\$\{([^\}]+)?\}/g, match;
-    console.log(re)
     while(match = re.exec(tpl)) {
         tpl = tpl.replace(match[0], data[match[1]]);
         console.log(match[0], match[1])
@@ -207,7 +267,7 @@ function promptAgents(cultureId) {
 function addIntro(key, agent) {
   return new Promise((resolve, reject) => {
     // TODO context?
-    ___cquery(key, agent.priming[0] +' '+ agent.priming[1]).then(function(e){
+    ___cquery(key, agent.priming[0] +' '+ agent.priming[1]).then(e => {
       // create a response and add it
       const data = {
         created: Firestore.FieldValue.serverTimestamp(),
@@ -225,7 +285,6 @@ function addIntro(key, agent) {
         .add(data);
 
       res.then(doc => {
-        console.log(doc);
         resolve(doc)
       })
 

@@ -175,29 +175,10 @@ function factoryIntroCell(intro) {
     }
   }
   $el.innerHTML = '';
-  twoColPost($el, intro);
-
-    return $el;
+  twoColPost($el, intro, 'introduction/'+ intro.id+ '/response', 0);
+  return $el;
 }
 
-// function displayAgentForm(culture) {
-//   let saveHandler = function(name, priming, type, temp, image){
-//     createAgent(culture, name, priming, type, temp, image);
-//   };
-//   let cancelHandler = function() {
-//     hideModel();
-//   }
-//   var $af = agentForm(saveHandler, cancelHandler);
-//
-//   // header
-//   $$({el: 'h2', text: 'New agent', $parent: $af.header})
-//
-//   // for testing
-//   // $af.name.value = 'testing';
-//   // $af.priming.value = 'You are an ethicist. You are meant to comment on documents posted on a message board. Here is one: ';
-//   // $ta.value = 'You are an ethicist. You are meant to pose provocative statements on an academic message board where you hope to solicit the input of your peers on controversial issues. What is your first post?';
-//   showModal($af.root);
-// }
 
 // AGENT pages
 
@@ -217,7 +198,7 @@ export async function displayAgent(agentId, cultureId) {
   if (!agent.priming) {
     agent.priming = [
       'I am an agent who knows about all kinds of stuff.',
-      'This is a post I wrote: ',
+      'This is a two sentence post I wrote: ',
       'I read a post `${intro_text}` and wrote a response: ',
       'I read a post `${intro_text}` and a response `${response_text}`. When I read the response to the post I felt: ']
   }
@@ -270,26 +251,28 @@ export async function displayIntroduction(id) {
   var $list = $$({$parent: $root})
 
   $header.appendChild(backToCulture(culture));
-  twoColPost($intro, intro, false);
+  twoColPost($intro, intro);
 
   const c = collection(getFirestore(), 'introduction', id, 'response');
   const q = query(c, orderBy('created', 'asc'));
   onSnapshot(q,
     function(snapshot) {
-      snapshot.docChanges().forEach(divFactory($list, factoryResponseCell));
+      snapshot.docChanges().forEach(divFactory($list, function(data){
+         return factoryResponseCell(data, 'introduction/'+ id+ '/response/');
+       }));
     }, function(e){
       console.error(e);
     });
 
 }
 
-function factoryResponseCell(data) {
+function factoryResponseCell(data, basepath) {
   var $el = $(data.id);
   if (!$el) {
     $el = $$({id: data.id, className: 'response-cell twoColumn'});
   }
   $el.innerHTML = '';
-  twoColPost($el, data);
+  twoColPost($el, data, basepath + data.id + '/response', 1);
   return $el;
 }
 
@@ -745,6 +728,8 @@ function fileInput(imageUrl) {
 }
 
 function getStorageUrl(path) {
+  if (!path)
+    return '';
   if (path.indexOf('http')==0)
     return path;
   return 'http://storage.googleapis.com/'+getFirebaseConfig().storageBucket+'/'+path;
@@ -776,15 +761,16 @@ function backToCulture(culture){
   return $h2;
 }
 
-function twoColPost($el, data, countResponses = true) {
+function twoColPost($el, data, countResponsePath, style) {
   var $twoCol = twoCol($el);
   var $author = $$({el: 'span', className: 'author', text: '', $parent: $twoCol.col2row1});
   var $time = $$({el: 'span', className: 'time', text: '', $parent: $twoCol.col2row1});
   var $text = $$({el: 'div', className: 'text', text: data.text, $parent: $twoCol.col2row2});
-  if (countResponses) {
+  if (countResponsePath) {
     var $responses = $$({el: 'div', className: 'responses',  $parent: $twoCol.col2row2});
     var $responseIcon = $$({el: 'span', className: 'material-symbols-outlined response-icon', text: 'comment', $parent: $responses});
     var $responseCount = $$({el: 'span', className: 'response-count', text: '0', $parent: $responses});
+    var $responseText = $$({el: 'span', className: 'response-text', text: '', $parent: $responses});
   }
   getMember(data.member, function(member) {
     $twoCol.userPic.innerHTML = '<img src="'+getStorageUrl(member.image)+'" alt="'+
@@ -801,14 +787,25 @@ function twoColPost($el, data, countResponses = true) {
   timestamper();
 
   // tracking responses // TODO watch // is it too heavy?
-  if (countResponses) {
-  const c = collection(getFirestore(), 'introduction', data.id, 'response');
+  if (countResponsePath) {
+  const c = collection(getFirestore(), countResponsePath);
   const q = query(c, orderBy('created', 'asc'));
   onSnapshot(q,
     function(snapshot) {
       snapshot.docChanges().forEach(function(change) {
         if (change.type == 'added') {
           $responseCount.innerText = Number($responseCount.innerText)+1;
+          if (style == 1) {
+            let nestedResponse = change.doc.data();
+            let $nrel = $$({$parent: $responseText, className: 'preview'});
+            let $imgel = $$({$parent: $nrel, el: 'span'});
+            $$({$parent: $nrel, text: nestedResponse.text, el: 'span'});
+            getMember(nestedResponse.member, function(member) {
+              $imgel.innerHTML = '<img src="'+getStorageUrl(member.image)+'" alt="'+
+                member.name +'" referrerpolicy="no-referrer"/>';
+              // $author.innerHTML = member.name;
+            });
+          }
         } else {
           console.log('intro response removed?')
         }
