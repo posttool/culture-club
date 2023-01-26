@@ -334,6 +334,11 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
       $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+prompt});
       const res = await services.getAgentResponse(prompt, temp, culturePath) ;
       $$({$parent: $debug, className: 'response', text: res.text});
+      if (res.log) {
+        res.log.forEach((log)=>{
+          $$({$parent: $debug, className: 'log', text: log});
+        })
+      }
       // $debug.scrollTo(0, $debug.scrollHeight);
     }});
   $form.appendChild($taRow);
