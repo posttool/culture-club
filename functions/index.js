@@ -11,10 +11,42 @@ admin.initializeApp();
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
 
+const search = require('./search');
+
 // const MAX_AGENTS_PER_INTRO = 100;
+const STYLE = [
+  'jeff koons',
+  'damien hirst',
+  'yayoi kusama',
+  'octane renderer, trending on CGsociety, 4k , unreal engine , wallpaper',
+];
+
+function oneOf(a) {
+  return a[Math.floor(Math.random()*a.length)];
+}
+
+function TemplateEngine(tpl, data = {}) {
+  var re = /\$\{([^\}]+)?\}/g, match;
+  while(match = re.exec(tpl)) {
+      tpl = tpl.replace(match[0], data[match[1]]);
+  }
+  return tpl;
+}
+
+function FunctionEngine(tpl, data = {}) {
+  var funcs = [];
+  var re = /\$\$(.+)?\$\$/g, match;
+  while(match = re.exec(tpl)) {
+    tpl = tpl.replace(match[0], '');
+    funcs.push(match[1])
+  }
+  return {text: tpl, funcs: funcs};
+}
 
 exports.helloWorld = functions.https.onRequest((request, response) => {
-  response.send("Hello  !");
+  search.googs2('mystic minimalist music').then(results => {
+    response.send("Hello  !"+results);
+  })
 });
 
 // exports.getUrl = functions.https.onCall(async (data, context) => {
@@ -26,17 +58,49 @@ exports.helloWorld = functions.https.onRequest((request, response) => {
 //     const [url] = await bucket.file(data).getSignedUrl(options);
 //     return url;
 // });
-
+async function getContext(culturePath){
+  var C = {
+    culture_name: '',
+    intro_samples: [],
+    intro_text: '',
+    now: new Date()
+  };
+  if (culturePath) {
+    var culture = await db.doc(culturePath).get();
+    C.culture_name = culture.data().name;
+    var introSnap = await db.collection('introduction')
+      .where('culture', '==', culturePath)
+      .orderBy('created', 'asc').limit(3).get();
+    introSnap.docs.forEach((doc) => {
+        C.intro_samples.push(doc.data())
+    });
+    if (C.intro_samples.length != 0)
+      C.intro_text = oneOf(C.intro_samples);
+  }
+  return C;
+}
 exports.testPriming =  functions
   .runWith({ secrets: [openAIApiKey] })
   .https.onCall(async (data, context) => {
-    var priming = data.prompt;
+    var prompt = data.prompt;
     var temp = data.temperature;
-    console.log(priming+" ..... "+temp);
-    // var culture = db.collection('culture').doc(data.culture)
+    if (prompt.startsWith('// chain')) {
+      var ctx = await getContext(data.cultureId);
+      return initChain(prompt, ctx, async (p) => {
+        var e = await ___cquery(openAIApiKey.value(), p, temp);
+        return e.choices[0].text;
+      });
+    }
     var e = await ___cquery(openAIApiKey.value(), priming, temp);
     return {text: e.choices[0].text};
   });
+
+function initChain(text, context, predictF) {
+    return new Promise((resolve, reject) => {
+      var c = new Chain(text, context, predictF);
+      c.start(resolve, reject);
+    });
+  }
 
 exports.testImage = functions
   .runWith({ secrets: [openAIApiKey] })
@@ -45,6 +109,63 @@ exports.testImage = functions
     var e = await ___igquery(openAIApiKey.value(), prompt);
     return {url: e.data[0].url};
   });
+
+class Chain {
+  constructor(rawtext, context, predictionFunction) {
+    this.rawtext = rawtext;
+    this.context = context;
+    this.predictionFunction = predictionFunction;
+    this.chain = rawtext.split(/\d+\./g);
+    if (this.chain[0].startsWith('// chain'))
+      this.chain.shift();
+    this.step = 0;
+    this.results = new Array(this.chain.length);
+  }
+  start(resolve, reject, stepCallback){
+      this.resolve = resolve;
+      this.reject = reject;
+      this.stepCallback = stepCallback;
+      this._exec();
+  }
+  async _exec() {
+    if (this.step == this.chain.length) {
+      this.resolve(this.results[this.results.length-1]);
+      return;
+    }
+    var p = this.chain[this.step].trim();
+    // var result = await this.predictionFunction(FunctionEngine(p, this.context));
+    var preprocessed = FunctionEngine(p, this.context);
+    var result;
+    if (preprocessed.text) {
+      var p = TemplateEngine(preprocessed.text, this.context);
+      result = await this.predictionFunction(p);
+      console.log(this.step+" -> "+result)
+    }
+    if (preprocessed.funcs.length != 0) {
+      let func = preprocessed.funcs[0];
+      if (func.startsWith('rejectif')) {
+        console.log(this.step+"  rrr "+func.substring(9).trim())
+        if (result == func.substring(9).trim()) {
+          console.log("REJECTED "+result)
+          this.reject(this);
+          return;
+        }
+      }
+      if (func.startsWith('search') ) {
+        var arg = TemplateEngine(func.substring(7), this.context);
+        console.log(this.step+"  sss "+func.substring(7))
+        result = arg;// await search.googs2(arg);
+      }
+    }
+    this.results.push(result);
+    this.context['result_'+(this.step+1)] = result;
+    this.step++;
+    this._exec();
+  }
+}
+
+
+
 
 // exports.onCreateCulture = functions.firestore.document('/culture/{docId}')
 //   .onCreate((change, context) => {
@@ -215,14 +336,6 @@ function addResponseJudgement(key, agent, intro, response) {
   });
 }
 
-function TemplateEngine(tpl, data = {}) {
-    var re = /\$\{([^\}]+)?\}/g, match;
-    while(match = re.exec(tpl)) {
-        tpl = tpl.replace(match[0], data[match[1]]);
-        console.log(match[0], match[1])
-    }
-    return tpl;
-}
 
 exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun((context) => {
   functions.logger.info('This will be run every 30 seconds!');
@@ -374,19 +487,17 @@ function __checkQ() {
   f()
     .then((e)=> {
       console.log("q finished work  ")
-      // console.log(e)
       __checkQ();
     })
     .catch((err) => {
-      console.log("Q ERROR")
+      console.log("q ERROR")
       console.error(err);
       __checkQ();
     });;
 }
 
 
-// sample delete collection https://firebase.google.com/docs/firestore/manage-data/delete-data#node.js_2
-
+// TODO persist q something like this
 
 async function deleteCollection(db, collectionPath, batchSize) {
   const collectionRef = db.collection(collectionPath);

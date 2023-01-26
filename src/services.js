@@ -1,11 +1,6 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
 
-const STYLE = [
-  'jeff koons',
-  'damien hirst',
-  'yayoi kusama',
-  'octane renderer, trending on CGsociety, 4k , unreal engine , wallpaper',
-];
+
 
 export class Services {
   constructor(functions) {
@@ -16,8 +11,9 @@ export class Services {
     this.urlCache = {};
   }
 
-  async getAgentResponse(prompt, temperature = 0.333){
-    var res = await this.testPriming({prompt: prompt, temperature: temperature});
+  async getAgentResponse(prompt, temperature = 0.333, cultureId = null){
+    var res = await this.testPriming({
+      prompt: prompt, temperature: temperature, cultureId: cultureId});
     return res.data;
   }
 

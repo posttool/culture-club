@@ -202,16 +202,6 @@ export async function displayAgent(agentId, cultureId) {
       'I read a post `${intro_text}` and wrote a response: ',
       'I read a post `${intro_text}` and a response `${response_text}`. When I read the response to the post I felt: ']
   }
-  var templateProps = {
-    samples: [],
-    culture_name: culture.name,
-    author_name: 'Karov Venkata'
-  }
-
-  const intro = new Introduction();
-  await intro.some('culture', '==', culture.path(), function(change){
-    agent.samples.push(change.doc.data());
-  });
 
   let saveHandler = async function(name, priming, type, temp, image) {
     agent.name = name;
@@ -229,7 +219,7 @@ export async function displayAgent(agentId, cultureId) {
   document.title = 'Agent: '+agent.name;
 
   // form and console
-  var $af = agentForm(saveHandler, cancelHandler, agent, templateProps);
+  var $af = agentForm(saveHandler, cancelHandler, agent, culture.path());
   $af.header.appendChild(backToCulture(culture));
 
   $('root').children[1].appendChild($af.root);
@@ -303,7 +293,7 @@ function cultureForm(saveHandler, cancelHandler, props = {}) {
   return $div;
 }
 
-function agentForm(saveHandler, cancelHandler, props = {}, templateProps = {}) {
+function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   var $div = $$({className: 'agent'});
   var $header = $$({$parent: $div, id: 'agent-header'});
   var $form = $$({$parent: $div, id: 'agent-form', el: 'div'});
@@ -343,15 +333,8 @@ function agentForm(saveHandler, cancelHandler, props = {}, templateProps = {}) {
       if ($ta.tabs.value != 0)
         prompt = $ta.textareas.value[0] + ' ' +prompt;
       let temp = $temp.value;
-      let ctx = {
-        culture_name: templateProps.culture_name,
-        author_name: templateProps.author_name,
-        intro_text: templateProps.samples.length != 0 ? oneOf(props.samples).text : '',
-        created: props.created ? props.created.toDate().toString() : new Date().toString()
-      };
-      let processedPrompt = TemplateEngine(prompt, ctx);
-      $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+processedPrompt});
-      const res = await services.getAgentResponse(processedPrompt, temp) ;
+      $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+prompt});
+      const res = await services.getAgentResponse(prompt, temp, culturePath) ;
       $$({$parent: $debug, className: 'response', text: res.text});
       // $debug.scrollTo(0, $debug.scrollHeight);
     }});
@@ -408,9 +391,6 @@ function TemplateEngine(tpl, data = {}) {
     return tpl;
 }
 
-function oneOf(a) {
-  return a[Math.floor(Math.random()*a.length)];
-}
 
 
 function introForm(saveHandler) {
@@ -669,7 +649,7 @@ function textareaGroup(names) {
   c.update = () => {
     $tas.forEach(($ta, index) => {
       if (c._data && c._data[index])
-        $ta.innerText = c._data[index];
+        $ta.innerHTML = c._data[index].replace(/\r?\n/g, '\r\n');
     })
   }
   names.forEach((name, index) => {

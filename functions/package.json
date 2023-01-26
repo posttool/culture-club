@@ -17,7 +17,9 @@
     "@google-cloud/firestore": "^6.4.2",
     "firebase": "^9.15.0",
     "firebase-admin": "^11.4.1",
-    "firebase-functions": "^4.2.0"
+    "firebase-functions": "^4.2.0",
+    "html-to-text": "^9.0.3",
+    "puppeteer": "^19.6.1"
   },
   "devDependencies": {
     "eslint": "^8.9.0",
