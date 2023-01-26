@@ -79,28 +79,23 @@ async function getContext(culturePath){
   }
   return C;
 }
+
 exports.testPriming =  functions
   .runWith({ secrets: [openAIApiKey] })
   .https.onCall(async (data, context) => {
-    var prompt = data.prompt;
-    var temp = data.temperature;
-    if (prompt.startsWith('// chain')) {
-      var ctx = await getContext(data.cultureId);
-      return initChain(prompt, ctx, async (p) => {
-        var e = await ___cquery(openAIApiKey.value(), p, temp);
-        return e.choices[0].text;
-      });
+    async function predictF(p) {
+      var e = await ___cquery(openAIApiKey.value(), p, data.temperature);
+      return e.choices[0].text;
     }
-    var e = await ___cquery(openAIApiKey.value(), priming, temp);
-    return {text: e.choices[0].text};
+    var ctx = await getContext(data.cultureId);
+    if (data.prompt.startsWith('// chain')) {
+      var c = new Chain(data.prompt, ctx, predictF);
+      await c.execute()
+      return {text: c.lastResult};
+    } else {
+      return {text: await predictF(data.prompt)};
+    }
   });
-
-function initChain(text, context, predictF) {
-    return new Promise((resolve, reject) => {
-      var c = new Chain(text, context, predictF);
-      c.start(resolve, reject);
-    });
-  }
 
 exports.testImage = functions
   .runWith({ secrets: [openAIApiKey] })
@@ -120,16 +115,14 @@ class Chain {
       this.chain.shift();
     this.step = 0;
     this.results = new Array(this.chain.length);
+    this.log = [];
   }
-  start(resolve, reject, stepCallback){
-      this.resolve = resolve;
-      this.reject = reject;
-      this.stepCallback = stepCallback;
-      this._exec();
+  async execute(){
+    await this._exec();
+    return true;
   }
   async _exec() {
     if (this.step == this.chain.length) {
-      this.resolve(this.results[this.results.length-1]);
       return;
     }
     var p = this.chain[this.step].trim();
@@ -138,29 +131,32 @@ class Chain {
     var result;
     if (preprocessed.text) {
       var p = TemplateEngine(preprocessed.text, this.context);
-      result = await this.predictionFunction(p);
-      console.log(this.step+" -> "+result)
+      result = String(await this.predictionFunction(p)).trim();
+      this.log.push(this.step+" -> "+preprocessed.text+' '+result)
     }
     if (preprocessed.funcs.length != 0) {
       let func = preprocessed.funcs[0];
       if (func.startsWith('rejectif')) {
-        console.log(this.step+"  rrr "+func.substring(9).trim())
+        this.log.push(this.step+"  rrr "+func.substring(9).trim()+" "+result)
         if (result == func.substring(9).trim()) {
-          console.log("REJECTED "+result)
-          this.reject(this);
-          return;
+          this.log.push("REJECTED "+result)
+          throw new Error('exit', this);
         }
       }
       if (func.startsWith('search') ) {
         var arg = TemplateEngine(func.substring(7), this.context);
-        console.log(this.step+"  sss "+func.substring(7))
-        result = arg;// await search.googs2(arg);
+        this.log.push(this.step+"  sss "+arg.substring(0,30))
+        result =  await search.googs2(arg);
+        if (result.length>2000)
+          result = result.substring(result.length-2000);
       }
     }
+    this.lastResult = result;
+    this.log.push(result);
     this.results.push(result);
     this.context['result_'+(this.step+1)] = result;
     this.step++;
-    this._exec();
+    await this._exec();
   }
 }
 

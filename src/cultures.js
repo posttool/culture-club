@@ -330,8 +330,6 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   $$({$parent: $taRow, el: 'button', text: 'start', className: 'material-icons lite-bg',
     click: async function() {
       let prompt = $ta.textareas.value[$ta.tabs.value];
-      if ($ta.tabs.value != 0)
-        prompt = $ta.textareas.value[0] + ' ' +prompt;
       let temp = $temp.value;
       $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+prompt});
       const res = await services.getAgentResponse(prompt, temp, culturePath) ;
