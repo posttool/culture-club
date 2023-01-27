@@ -330,32 +330,37 @@ function promptAgents(cultureId) {
 
 function addIntro(key, agent) {
   return new Promise((resolve, reject) => {
-    // TODO context?
-    ___cquery(key, agent.priming[0] +' '+ agent.priming[1]).then(e => {
-      if (e.error) {
-        reject(e);
-        return;
-      }
-      // create a response and add it
-      const data = {
-        created: Firestore.FieldValue.serverTimestamp(),
-        member: 'member/' + agent.id,
-        culture: agent.culture,
-        text: e.choices[0].text,
-        stats: {
-          adopted: 0,
-          rejected: 0
-        }
-      };
-      // a sub collection in the introduction
-      const res = db
-        .collection('introduction')
-        .add(data);
+    async function predictF(p) {
+      var e = await ___cquery(key, p, agent.temperature);
+      return e.choices[0].text;
+    }
+    getContext(agent.culture, {
+        agent_intro: agent.priming[0]
+      }).then(ctx => {
+        var c = new chain.Chain(agent.priming[1], ctx, predictF);
+        c.execute().then(result => {
+        // create a response and add it
+        const data = {
+          created: Firestore.FieldValue.serverTimestamp(),
+          member: 'member/' + agent.id,
+          culture: agent.culture,
+          text: c.lastResult,
+          log: c.log,
+          stats: {
+            adopted: 0,
+            rejected: 0
+          }
+        };
+        // a sub collection in the introduction
+        const res = db
+          .collection('introduction')
+          .add(data);
 
-      res.then(doc => {
-        resolve(doc)
-      })
+        res.then(doc => {
+          resolve(doc)
+        })
 
+      });
     });
   });
 }

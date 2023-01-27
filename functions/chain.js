@@ -1,3 +1,4 @@
+const search = require('./search');
 
 /**
  * chain handles input like ```
@@ -44,7 +45,7 @@ class Chain {
     if (this.chain[0].startsWith('// chain'))
       this.chain.shift();
     this.step = 0;
-    this.results = new Array(this.chain.length);
+    this.results = [];
     this.log = [];
   }
   async execute(){
