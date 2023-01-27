@@ -1,4 +1,4 @@
-const {Firestore} = require('@google-cloud/firestore');
+const { Firestore } = require('@google-cloud/firestore');
 const functions = require("firebase-functions");
 const { defineSecret } = require('firebase-functions/params');
 const openAIApiKey = defineSecret('OPENAI_API_KEY');
@@ -22,12 +22,12 @@ const STYLE = [
 ];
 
 function oneOf(a) {
-  return a[Math.floor(Math.random()*a.length)];
+  return a[Math.floor(Math.random() * a.length)];
 }
 
 exports.helloWorld = functions.https.onRequest((request, response) => {
   search.googs2('mystic minimalist music').then(results => {
-    response.send("Hello  !"+results);
+    response.send("Hello  !" + results);
   })
 });
 
@@ -40,8 +40,10 @@ exports.helloWorld = functions.https.onRequest((request, response) => {
 //     const [url] = await bucket.file(data).getSignedUrl(options);
 //     return url;
 // });
-async function getContext(culturePath, ctx = {}){
-  var C = { ...ctx, //agent_intro
+
+async function getContext(culturePath, ctx = {}) {
+  var C = {
+    ...ctx, //agent_intro
     culture_name: null,
     culture_description: null,
     now: new Date()
@@ -61,14 +63,14 @@ async function addContextSamples(culturePath, ctx = {}) {
     .where('culture', '==', culturePath)
     .orderBy('created', 'asc').limit(3).get();
   introSnap.docs.forEach((doc) => {
-      ctx.intro_samples.push(doc.data())
+    ctx.intro_samples.push(doc.data())
   });
   if (ctx.intro_samples.length != 0)
     ctx.intro_text = oneOf(ctx.intro_samples).text;
 }
 
 
-exports.testPriming =  functions
+exports.testPriming = functions
   .runWith({ secrets: [openAIApiKey] })
   .https.onCall(async (data, context) => {
     async function predictF(p) {
@@ -82,51 +84,62 @@ exports.testPriming =  functions
       await c.execute()
     } catch (e) {
     }
-    return {text: c.lastResult, log: c.log};
+    return { text: c.lastResult, log: c.log };
   });
 
 exports.testImage = functions
   .runWith({ secrets: [openAIApiKey] })
   .https.onCall(async (data, context) => {
-    var prompt = data.prompt;
-    var e = await ___igquery(openAIApiKey.value(), prompt);
-    return {url: e.data[0].url};
+    var prompt = data.prompt  + ' ' + data.xtra;
+    const e = await ___igquery(openAIApiKey.value(), prompt.trim());
+    return { url: e.data[0].url };
   });
 
-
-
-
-// exports.onCreateCulture = functions.firestore.document('/culture/{docId}')
-//   .onCreate((change, context) => {
-//     functions.logger.info("Hello !!!! - >", change, context);
-//     console.log("XXX@@@@")
-//   });
-
-exports.onCreateMember = functions
+exports.updateImage = functions
   .runWith({ secrets: [openAIApiKey] })
-  .firestore.document('/member/{docId}')
-  .onCreate(async (change, context) => {
-    const member = change.data();
-    member.id = context.params.docId;
-    functions.logger.info(member);
-    if (member.priming) {
-      // its an agent
-      if (!member.image) {
-        var prompt = member.name;
-        var e = await ___igquery(openAIApiKey.value(), prompt);
-        let fimg = await fetch(e.data[0].url)
-        let fimgb = Buffer.from(await fimg.arrayBuffer());
-        //copy to storageBucket
-        const filePath = `${member.id}/user-pic.jpg`;
-        const file = await bucket.file(filePath);
-        await file.save(fimgb);
-        return change.ref.set({
-          image: filePath
-        }, {merge: true});
-      }
-    }
-    return true;
+  .https.onCall(async (data, context) => {
+    const agentDoc = db.collection('member').doc(data.agent_id);
+    const agentSnap = await agentDoc.get();
+    const agent = agentSnap.data();
+    agent.id = agentSnap.id;
+    const url = await createImageForAgent(openAIApiKey.value(), agent, data.xtra);
+    const r = await agentDoc.update({ image: url });
+    console.log(r);
+    return { url: url };
   });
+
+async function createImageForAgent(key, member, xtra) {
+  var prompt = member.name + ' ' +xtra;
+  console.log('create '+prompt);
+  var e = await ___igquery(key, prompt.trim());
+  let fimg = await fetch(e.data[0].url)
+  let fimgb = Buffer.from(await fimg.arrayBuffer());
+  //copy to storageBucket
+  const morepath = Math.floor(Math.random()*10000000000);
+  const filePath = `${member.id}/${morepath}/user-pic.jpg`;
+  const file = bucket.file(filePath);
+  await file.save(fimgb);
+  return filePath;
+}
+
+// exports.onCreateMember = functions
+//   .runWith({ secrets: [openAIApiKey] })
+//   .firestore.document('/member/{docId}')
+//   .onCreate(async (change, context) => {
+//     const member = change.data();
+//     member.id = context.params.docId;
+//     functions.logger.info(member);
+//     if (member.priming) {
+//       // its an agent
+//       if (!member.image) {
+//         var filePath = await createImageForAgent(openAIApiKey.value(), member);
+//         return change.ref.set({
+//           image: filePath
+//         }, { merge: true });
+//       }
+//     }
+//     return true;
+//   });
 
 // When an introduction is created, fire up all the agents...
 exports.onCreateIntroduction = functions
@@ -145,14 +158,14 @@ exports.onCreateIntroduction = functions
       var agent = doc.data();
       agent.id = doc.id;
       if ('member/' + agent.id != intro.member) {
-        ___queue(function() {
+        ___queue(function () {
           return addResponse(openAIApiKey.value(), agent, intro);
         });
       }
     }).on('end', () => {
       return true;
     });
-});
+  });
 
 exports.onCreateResponse = functions
   .runWith({ secrets: [openAIApiKey] })
@@ -160,9 +173,9 @@ exports.onCreateResponse = functions
   .onCreate((change, context) => {
     var response = change.data();
     response.id = context.params.responseId;
-    const intro = db
-      .collection('introduction')
-      .doc(context.params.introId).get().then((e)=>{
+    const intro = db.collection('introduction')
+      .doc(context.params.introId)
+      .get().then((e) => {
         let intro = e.data();
         intro.id = e.id;
 
@@ -174,7 +187,7 @@ exports.onCreateResponse = functions
           var agent = doc.data();
           agent.id = doc.id;
           if ('member/' + agent.id != response.member) {
-            ___queue(function() {
+            ___queue(function () {
               return addResponseJudgement(openAIApiKey.value(), agent, intro, response);
             });
           }
@@ -183,7 +196,7 @@ exports.onCreateResponse = functions
         });
 
       });
-});
+  });
 
 
 function addResponse(key, agent, intro) {
@@ -199,10 +212,14 @@ function addResponse(key, agent, intro) {
     }).then(ctx => {
       var c = new chain.Chain(agent.priming[2], ctx, predictF);
       c.execute().then(result => {
+        if (!c.lastResult) {
+          reject();
+          return;
+        }
         // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
-          member: 'member/'+agent.id,
+          member: 'member/' + agent.id,
           text: c.lastResult,
           log: c.log,
           stats: {
@@ -232,7 +249,7 @@ function addResponse(key, agent, intro) {
 function addResponseJudgement(key, agent, intro, response) {
   return new Promise((resolve, reject) => {
     async function predictF(p) {
-      var e = await ___cquery(key, p, agent.temperature);
+      var e = await ___cquery(key, p, agent.temperature); //might pass along resolve reject instead
       return e.choices[0].text;
     }
     getContext(agent.culture, {
@@ -243,10 +260,14 @@ function addResponseJudgement(key, agent, intro, response) {
     }).then(ctx => {
       var c = new chain.Chain(agent.priming[3], ctx, predictF);
       c.execute().then(result => {
-        // create a response and add it
+        if (!c.lastResult) {
+          reject();
+          return;
+        }
+       // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
-          member: 'member/'+agent.id,
+          member: 'member/' + agent.id,
           text: c.lastResult,
           log: c.log,
           stats: {
@@ -283,7 +304,7 @@ exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun(
     culture.id = doc.id;
     if (culture) {
       // addIntro(openAIApiKey.value(), agent);
-      functions.logger.info('   '+aculture.name+' wants to hear from its agents!');
+      functions.logger.info('   ' + aculture.name + ' wants to hear from its agents!');
     }
   }).on('end', () => {
     console.log(`end`);
@@ -296,7 +317,7 @@ exports.startPromptingAgentsForCulture = functions.https.onRequest((request, res
   if (!request.query.id)
     throw new Error('need id')
   promptAgents(request.query.id);
-  response.send("OK "+request.query.id);
+  response.send("OK " + request.query.id);
 });
 
 exports.callAgentsForCulture = functions.https.onCall((data, context) => {
@@ -316,7 +337,7 @@ function promptAgents(cultureId) {
     let agent = doc.data();
     let agentId = agent.id = doc.id;
     if (agent.priming[1]) {
-      ___queue(function() {
+      ___queue(function () {
         return addIntro(openAIApiKey.value(), agent);
       });
     }
@@ -333,10 +354,10 @@ function addIntro(key, agent) {
       return e.choices[0].text;
     }
     getContext(agent.culture, {
-        agent_intro: agent.priming[0]
-      }).then(ctx => {
-        var c = new chain.Chain(agent.priming[1], ctx, predictF);
-        c.execute().then(result => {
+      agent_intro: agent.priming[0]
+    }).then(ctx => {
+      var c = new chain.Chain(agent.priming[1], ctx, predictF);
+      c.execute().then(result => {
         // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
@@ -413,26 +434,25 @@ async function ___igquery(openai_api_key, prompt) {
 // could be better
 var __q = [];
 var __working = false;
-function ___queue(f){
+function ___queue(f) {
   __q.push(f);
   if (!__working)
     __checkQ();
 }
 function __checkQ() {
-  if (__q.length ==0) {
+  if (__q.length == 0) {
     __working = false;
     return;
   }
   __working = true;
   var f = __q.pop();
   f()
-    .then((e)=> {
-      console.log("q finished work  ")
+    .then((e) => {
+      console.log("q finished work  "+ __q.length)
       __checkQ();
     })
     .catch((err) => {
-      console.log("q ERROR")
-      console.error(err);
+      console.log("q reject "+ __q.length);
       __checkQ();
     });;
 }

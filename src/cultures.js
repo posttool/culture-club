@@ -41,14 +41,14 @@ export async function displayCultures() {
     var $cultureList = $$({ $parent: $div, id: 'culture-list' });
     var $cultureOptions = $$({ $parent: $div, id: 'culture-options' });
 
-    $$({ el: 'h2', text: 'Cultures', $parent: $cultureHeader });
+    $$({ $parent: $cultureHeader, el: 'h2', text: 'Cultures' });
     $$({
-      el: 'button', text: 'Create Culture', $parent: $cultureOptions,
+      $parent: $cultureOptions, el: 'button', text: 'Create Culture',
       click: displayCultureForm
     });
 
     const culture = new Culture();
-    await culture.all(divFactory($cultureList, factoryCultureCell));
+    culture.all(divFactory($cultureList, factoryCultureCell));
   } else {
     $div.appendChild($$({ text: 'Welcome. Log in at the bottom left corner.' }))
   }
@@ -196,16 +196,18 @@ export async function displayAgent(agentId, cultureId) {
       '${agent_intro}\n\rI read a post `${intro_text}` and a response `${response_text}`. When I read the response to the post I felt: ']
   }
 
-  let saveHandler = async function (name, priming, type, temp, image) {
-    agent.name = name;
-    agent.priming = priming;
-    agent.type = type;
-    agent.temperature = temp;
-    // agent.image = image;
-    await agent.save();
+  let saveHandler = async function (name, priming, temp) {
+    return new Promise((resolve, reject) => {
+      agent.name = name;
+      agent.priming = priming;
+      agent.temperature = temp;
+      agent.save().then(r => {
+        console.log(r);
+        resolve(r);
+      });
+    })
   };
   let cancelHandler = function () {
-    // back to culture?
   }
 
   // title
@@ -297,31 +299,43 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   var $form = $$({ $parent: $div, id: 'agent-form', el: 'div' });
   var $formButtons = $$({ $parent: $div, className: 'agent-buttons' });
   var $debug = $$({ $parent: $('root').children[2] });
+  $debug.log = function (style, text) {
+    $$({ $parent: $debug, className: style, text: text });
+    $debug.parentNode.scrollTo(0, $debug.parentNode.scrollHeight);
+  }
 
-  // name input
-  var $nameRow = $$({ className: 'agent-buttons' });
+  // name input & image
+  var $nameRow = $$({ $parent: $form, className: 'name-and-image' });
   var $input = $$({ $parent: $nameRow, el: 'input', type: 'text', className: 'agent-name-input', value: props.name });
   $input.setAttribute('placeholder', 'Agent name');
   var $image = fileInput(props.image);
   $nameRow.appendChild($image.div);
-  var $regen = $$({
-    $parent: $nameRow, el: 'button', text: 'refresh', className: 'material-icons lite-bg',
-    click: function (e) {
-      $$({ $parent: $debug, className: 'prompt', text: 'Generating proto image for "' + $input.value + '"' });
-      services.getAgentImage($input.value).then((res) => {
-        $$({ $parent: $debug, className: 'response', text: 'Complete - final results will vary.' });
-        // $debug.scrollTo(0, $debug.scrollHeight);
+
+  //image regen
+  var $regen = $$({ $parent: $nameRow, el: 'button', text: 'refresh', className: 'material-icons lite-bg' });
+  var $regenExtra = $$({ $parent: $nameRow, el: 'input', className: 'image-extras' });
+  $regenExtra.setAttribute('placeholder', 'extra image attributes');
+  $regen.addEventListener('click', (e) => {
+    $debug.log('prompt', 'Generating proto image for "' + $input.value +' ' +$regenExtra.value + '"');
+    if (props.id) {
+      services.updateAgentImage(props.id, $regenExtra.value).then((res) => {
+        $debug.log('response', 'Complete.');
+        $image.img.src = getStorageUrl(res.url);
+      });
+    } else {
+      services.getAgentImage($input.value, $regenExtra.value).then((res) => {
+        $debug.log('response', 'Complete - final results will vary.');
         $image.img.src = res.url;
       });
     }
   });
-  $form.appendChild($nameRow);
+
 
   // textarea for priming
   // multiple priming ->
   if (typeof props.priming == 'string')
     props.priming = [props.priming, '', '', '']
-  var $taRow = $$({ className: 'agent-buttons' });
+  var $taRow = $$({ $parent: $form, className: 'agent-buttons' });
   var $ta = tabbedTextareaGroup(['Introduction', 'Post', 'Respond', 'Judge'], props.priming);
   $taRow.appendChild($ta.$el);
   $$({
@@ -330,25 +344,19 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
       let prompt = $ta.textareas.value[$ta.tabs.value];
       let agent_intro = $ta.textareas.value[0];
       let temp = $temp.value;
-      $$({ $parent: $debug, className: 'prompt', text: '(' + temp + ') ' + prompt });
+      $debug.log('prompt', '(' + temp + ') ' + prompt);
       const res = await services.getAgentResponse(prompt, temp, {
         agent_intro: agent_intro, culture_id: culturePath
       });
-      $$({ $parent: $debug, className: 'response', text: res.text });
+      $debug.log('response', res.text);
       if (res.log) {
         res.log.forEach((log) => {
-          $$({ $parent: $debug, className: 'log', text: log });
-        })
+          $debug.log('log', log);
+        });
       }
-      var $scrollC = $debug.parentNode;
-      $scrollC.scrollTo(0, $scrollC.scrollHeight);
     }
   });
-  $form.appendChild($taRow);
 
-  // type radio select
-  // var $type = radioGroup('type', ['Responder', 'Prompter'], props.type);
-  // $form.appendChild(labeled('Type', $type));
 
   // temperature slider
   var $temp = $$({ el: 'input', type: 'range' });
@@ -357,7 +365,6 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   $temp.setAttribute('step', .05);
   $temp.setAttribute('value', props.temperature);
   $form.appendChild(labeled('Temp', $temp));
-
 
   function validate() {
     if (!$input.value) {
@@ -375,8 +382,19 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   var $submit = $$({
     el: 'button', text: saveLabel, $parent: $formButtons, click: function () {
       if (validate()) {
-        // $submit.setAttribute('disabled', 'disabled');
-        saveHandler($input.value, $ta.textareas.value, 'all', $temp.value, $image.value()); //$type.value()
+        $submit.setAttribute('disabled', 'disabled');
+        saveHandler($input.value, $ta.textareas.value, $temp.value).then(e => {
+          $submit.removeAttribute('disabled');
+          $submit.innerText = 'Update';
+          $debug.log('response', 'Save complete.');
+          if (!props.image) {
+            $debug.log('response', 'Generating image.');
+            services.updateAgentImage(e.id, $regenExtra.value).then((res) => {
+              $debug.log('response', 'Complete.');
+              $image.img.src = getStorageUrl(res.url);
+            });
+            }
+        });
       }
     }
   });
@@ -495,6 +513,7 @@ async function saveFileAndUpdateDoc(file, filePath, cDoc) {
 /////////////////////////////////////////////////////////////////////////
 // utils
 
+// move to data objects
 function getMember(path, f) {
   if (path.indexOf('member/') == 0) {
     path = path.substring(7);

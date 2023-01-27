@@ -125,7 +125,9 @@ exports.googs2 = async (q) => {
   var html = await page.content();
   return convert(html, {
     selectors: [
-      { selector: 'a', format: 'skip' }
+      { selector: 'a', format: 'skip' },
+      { selector: 'img', format: 'skip' },
+      { selector: 'data', format: 'skip' },
     ]
   });
 }

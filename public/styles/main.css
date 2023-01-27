@@ -209,6 +209,8 @@ body {
 }
 
 #culture-options {
+  position: sticky;
+  bottom: 20px;
   float: right;
   padding-right: 20px;
 }
@@ -262,7 +264,7 @@ body {
   font-weight: bold;
   border-top: 1px solid #ddd;
   padding: 20px 50px 20px 20px;
-  font-family: 'Fira Code', monospace;
+  font-family: 'Source Code Pro', monospace;
 }
 
 .col3 .response {
@@ -274,7 +276,7 @@ body {
   color: #666;
   padding: 0 20px 10px 20px;
   white-space: pre-wrap;
-  font-family: 'Fira Code', monospace;
+  font-family: 'Source Code Pro', monospace;
   font-size: 11.5px;
   line-height: 12.5px;
 }
@@ -290,12 +292,19 @@ body {
   height: 350px;
   padding: 10px 40px 10px 20px;
   white-space: pre-line;
-  font-family: 'Fira Code', monospace;
+  font-family: 'Source Code Pro', monospace;
 }
 
+#agent-form .name-and-image {
+  padding-bottom: 20px;
+}
 #agent-form input.agent-name-input {
-  font-size: 24px;
+  font-size: 32px;
   padding-left: 20px;
+}
+#agent-form input.image-extras {
+  border: none;
+  height: 35px;
 }
 
 .agent-buttons button {

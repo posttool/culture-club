@@ -21,6 +21,16 @@ const search = require('./search');
     // chain
 
     1.
+    Here is a post: `${intro_text}` In one word, is it about chess?
+    $$rejectif No$$
+
+    2.
+    I read a post `${intro_text}` and wrote a response: 
+
+
+    // chain
+
+    1.
     Post: something about flowers
     Respond: True
     Post: something about anything else
@@ -58,24 +68,29 @@ class Chain {
     }
     this.log.push('--------------------------');
     var p = this.chain[this.step].trim();
-    // var result = await this.predictionFunction(FunctionEngine(p, this.context));
     var preprocessed = FunctionEngine(p, this.context);
     var result;
     if (preprocessed.text) {
-      var p = TemplateEngine(preprocessed.text, this.context);
+      var p = TemplateEngine(preprocessed.text, this.context).trim();
       result = String(await this.predictionFunction(p)).trim();
       this.log.push(this.step + " t -> " + p.substring(0, 512))
     }
     if (preprocessed.funcs.length != 0) {
       let func = preprocessed.funcs[0];
-      if (func.startsWith('rejectif')) {
-        this.log.push(this.step + " rejectif -> " + func.substring(9).trim())
+      if (func == 'reject' || func == 'exit') {
+        this.log.push("exiting " + result)
+        // throw new Error('exit', this);
+        return;
+      }
+      if (func.startsWith('rejectif ')) {
+        this.log.push(this.step + " rejectif -> " + func.substring(9).trim()+ " -> " + result)
         if (result.startsWith(func.substring(9).trim())) {
-          this.log.push("REJECTED " + result)
-          throw new Error('exit', this);
+          this.log.push("exiting " + result)
+          // throw new Error('exit', this);
+          return;
         }
       }
-      if (func.startsWith('search')) {
+      if (func.startsWith('search ')) {
         var arg = TemplateEngine(func.substring(7), this.context);
         this.log.push(this.step + " search -> " + arg.substring(0, 512))
         result = await search.googs2(arg);

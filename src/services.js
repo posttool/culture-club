@@ -6,6 +6,7 @@ export class Services {
   constructor(functions) {
     this.testPriming = httpsCallable(functions, 'testPriming');
     this.testImage = httpsCallable(functions, 'testImage');
+    this.updateImage = httpsCallable(functions, 'updateImage');
     this.startAgents = httpsCallable(functions, 'callAgentsForCulture');
     this.getUrl = httpsCallable(functions, 'getUrl');
     this.urlCache = {};
@@ -17,9 +18,13 @@ export class Services {
     return res.data;
   }
 
-  async getAgentImage(prompt) {
-    prompt = prompt + ' ' + STYLE[Math.floor(Math.random()*STYLE.length)];
-    var res = await this.testImage({prompt: prompt});
+  async getAgentImage(prompt, xtra) {
+    var res = await this.testImage({prompt: prompt, xtra: xtra});
+    return res.data;
+  }
+
+  async updateAgentImage(id, xtra) {
+    var res = await this.updateImage({agent_id: id, xtra: xtra});
     return res.data;
   }
 
