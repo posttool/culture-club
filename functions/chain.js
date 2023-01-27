@@ -48,7 +48,7 @@ class Chain {
     this.results = [];
     this.log = [];
   }
-  async execute(){
+  async execute() {
     await this._exec();
     return true;
   }
@@ -56,6 +56,7 @@ class Chain {
     if (this.step == this.chain.length) {
       return;
     }
+    this.log.push('--------------------------');
     var p = this.chain[this.step].trim();
     // var result = await this.predictionFunction(FunctionEngine(p, this.context));
     var preprocessed = FunctionEngine(p, this.context);
@@ -63,30 +64,29 @@ class Chain {
     if (preprocessed.text) {
       var p = TemplateEngine(preprocessed.text, this.context);
       result = String(await this.predictionFunction(p)).trim();
-      this.log.push(this.step+" t -> "+p.substring(0,512))
+      this.log.push(this.step + " t -> " + p.substring(0, 512))
     }
     if (preprocessed.funcs.length != 0) {
       let func = preprocessed.funcs[0];
       if (func.startsWith('rejectif')) {
-        this.log.push(this.step+" rejectif -> "+func.substring(9).trim())
-        if (result == func.substring(9).trim()) {
-          this.log.push("REJECTED "+result)
+        this.log.push(this.step + " rejectif -> " + func.substring(9).trim())
+        if (result.startsWith(func.substring(9).trim())) {
+          this.log.push("REJECTED " + result)
           throw new Error('exit', this);
         }
       }
-      if (func.startsWith('search') ) {
+      if (func.startsWith('search')) {
         var arg = TemplateEngine(func.substring(7), this.context);
-        this.log.push(this.step+" search -> "+arg.substring(0,512))
-        result =  await search.googs2(arg);
-        if (result.length>2000)
-          result = result.substring(result.length-2000);
+        this.log.push(this.step + " search -> " + arg.substring(0, 512))
+        result = await search.googs2(arg);
+        if (result.length > 2000)
+          result = result.substring(result.length - 2000);
       }
     }
     this.lastResult = result;
-    this.log.push(this.step+" result -> "+result);
-    this.log.push('--------------------------');
+    this.log.push(this.step + " result -> " + result);
     this.results.push(result);
-    this.context['result_'+(this.step+1)] = result;
+    this.context['result_' + (this.step + 1)] = result;
     this.step++;
     await this._exec();
   }
@@ -98,8 +98,8 @@ exports.Chain = Chain;
 
 function TemplateEngine(tpl, data = {}) {
   var re = /\$\{([^\}]+)?\}/g, match;
-  while(match = re.exec(tpl)) {
-      tpl = tpl.replace(match[0], data[match[1]]);
+  while (match = re.exec(tpl)) {
+    tpl = tpl.replace(match[0], data[match[1]].trim());
   }
   return tpl;
 }
@@ -107,9 +107,9 @@ function TemplateEngine(tpl, data = {}) {
 function FunctionEngine(tpl, data = {}) {
   var funcs = [];
   var re = /\$\$(.+)?\$\$/g, match;
-  while(match = re.exec(tpl)) {
-    tpl = tpl.replace(match[0], '');
+  while (match = re.exec(tpl)) {
+    tpl = tpl.replace(match[0], '').trim();
     funcs.push(match[1])
   }
-  return {text: tpl, funcs: funcs};
+  return { text: tpl, funcs: funcs };
 }

@@ -1,16 +1,27 @@
 .material-symbols-outlined {
   font-variation-settings:
-  'FILL' 0,
-  'wght' 400,
-  'GRAD' 0,
-  'opsz' 48
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 48
 }
+
 * {
   box-sizing: border-box;
 }
-html, body, label, input, textarea, button, input[type='file'], h1, h2, h3 {
+
+html,
+body,
+label,
+input,
+textarea,
+button,
+input[type='file'],
+h1,
+h2,
+h3 {
   font-family: 'Inter', 'Helvetica', sans-serif;
-  font-size:16px;
+  font-size: 16px;
   line-height: 21px;
   margin: 0;
   padding: 0;
@@ -21,18 +32,21 @@ h1 {
   margin: 0;
   font-size: 36px;
 }
+
 h2 {
   padding: 5px 0 18px 0;
   margin: 0;
   font-size: 28px;
 }
+
 h3 {
   padding: 5px 0 18px 0;
   margin: 0;
   font-size: 18px;
 }
 
-input[type='text'], textarea {
+input[type='text'],
+textarea {
   padding: 10px;
   font-size: 18px;
   line-height: 23px;
@@ -42,8 +56,9 @@ input[type='text'], textarea {
   border: 1px solid #ccc;
 }
 
-input[type='text']:focus, textarea:focus{
-    outline: none;
+input[type='text']:focus,
+textarea:focus {
+  outline: none;
 }
 
 button {
@@ -75,13 +90,14 @@ button.lite-bg:hover {
 
 .modal-layer {
   position: absolute;
-  top:0;
-  left:0;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(255,255,255,.23);
+  background-color: rgba(255, 255, 255, .23);
   backdrop-filter: blur(3px);
 }
+
 .modal-content {
   background-color: white;
   border-radius: 20px;
@@ -92,30 +108,34 @@ button.lite-bg:hover {
   box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 35px;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
 }
+
 #root {
   display: flex;
   flex-direction: row;
   height: 100%;
-  overflow:hidden;
+  overflow: hidden;
 }
 
-#root > .col1 {
+#root>.col1 {
   width: 10%;
   min-width: 100px;
   height: 100%;
   border-right: 1px solid #ddd;
 }
-#root  > .col2 {
+
+#root>.col2 {
   width: 63%;
   height: 100%;
   border-right: 1px solid #ddd;
   overflow-y: auto;
 }
-#root  > .col3 {
+
+#root>.col3 {
   width: 27%;
   height: 100%;
   font-size: 14px;
@@ -142,9 +162,11 @@ html, body {
   padding: 5px 20px 3px 20px;
   cursor: pointer;
 }
+
 .tab:hover {
   background-color: #ddd;
 }
+
 .tab.selected {
   border-bottom: 4px solid #ff5500;
 }
@@ -204,9 +226,9 @@ html, body {
   padding: 0;
   vertical-align: middle;
   text-align: center;
-  overflow:hidden;
+  overflow: hidden;
   border: 2.5px solid #333;
-  float:left;
+  float: left;
 }
 
 .agent-container .agent:hover {
@@ -220,24 +242,19 @@ html, body {
   height: 43px;
 }
 
-.agent-container .label {
-}
 
-.agent-container .agent-cells {
-  /* display: flex;
-  flex-direction: row; */
-}
 .agent-container .add-agent {
   cursor: pointer;
   font-size: 50px;
 }
+
 .agent-container .add-agent:hover {
-  color:#ff5500;
+  color: #ff5500;
 }
 
 .col3 {
   font-size: 12px;
-  line-height: 16px;
+  line-height: 14px;
 }
 
 .col3 .prompt {
@@ -245,6 +262,7 @@ html, body {
   font-weight: bold;
   border-top: 1px solid #ddd;
   padding: 20px 50px 20px 20px;
+  font-family: 'Fira Code', monospace;
 }
 
 .col3 .response {
@@ -255,8 +273,10 @@ html, body {
 .col3 .log {
   color: #666;
   padding: 0 20px 10px 20px;
-  font-size: 11px;
-  line-height: 13px;
+  white-space: pre-wrap;
+  font-family: 'Fira Code', monospace;
+  font-size: 11.5px;
+  line-height: 12.5px;
 }
 
 #agent-form input {
@@ -270,14 +290,12 @@ html, body {
   height: 350px;
   padding: 10px 40px 10px 20px;
   white-space: pre-line;
+  font-family: 'Fira Code', monospace;
 }
 
 #agent-form input.agent-name-input {
   font-size: 24px;
   padding-left: 20px;
-}
-
-.agent-buttons {
 }
 
 .agent-buttons button {
@@ -289,7 +307,7 @@ html, body {
 }
 
 .agent .twoColumn .col1 {
-  width:70%;
+  width: 70%;
 }
 
 .agent .twoColumn .col2 {
@@ -301,7 +319,8 @@ html, body {
   overflow-y: scroll;
 }
 
-.intro-main, .response-cell {
+.intro-main,
+.response-cell {
   display: flex;
   flex-direction: row;
   border-top: 1px solid #ddd;
@@ -324,48 +343,49 @@ html, body {
 
 
 
-  .twoColumn {
-    display: flex;
-    flex-direction: row;
-  }
+.twoColumn {
+  display: flex;
+  flex-direction: row;
+}
 
-  .twoColumn > .col1 {
-    width: 96px;
-  }
+.twoColumn>.col1 {
+  width: 96px;
+}
 
-  .intro-user-pic {
-    position: relative;
-    display: inline-block;
-    width: 46px;
-    height: 46px;
-    background-size: 46px;
-    border-radius: 23px;
-    margin: 10px 0 0 20px;
-  }
-  .intro-user-pic img {
-    border-radius: 50%;
-    width: 46px;
-    height: 46px;
-  }
+.intro-user-pic {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 46px;
+  background-size: 46px;
+  border-radius: 23px;
+  margin: 10px 0 0 20px;
+}
 
-  .twoColumn >  .col2 {
-    margin: 10px;
-    font-size: 14px;
-    width: 100%;
-  }
+.intro-user-pic img {
+  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+}
 
-  .col2 .author {
-    font-weight: bold;
-  }
+.twoColumn>.col2 {
+  margin: 10px;
+  font-size: 14px;
+  width: 100%;
+}
 
-  .col2 .time {
-    color: #999;
-    padding-left: 4px;
-  }
+.col2 .author {
+  font-weight: bold;
+}
 
-  .col2 .text {
-    padding: 8px 13% 20px 0;
-  }
+.col2 .time {
+  color: #999;
+  padding-left: 4px;
+}
+
+.col2 .text {
+  padding: 8px 13% 20px 0;
+}
 
 
 #intro-form-buttons {
@@ -395,6 +415,7 @@ html, body {
 .nav {
   cursor: pointer;
 }
+
 .nav:hover {
   color: #777;
 }
@@ -411,7 +432,7 @@ html, body {
 
 .preview {
   overflow: hidden;
-  white-space: nowrap
+  white-space: nowrap;
   text-overflow: ellipsis;
   width: 80%;
   font-size: 12px;
