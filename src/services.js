@@ -11,9 +11,9 @@ export class Services {
     this.urlCache = {};
   }
 
-  async getAgentResponse(prompt, temperature = 0.333, cultureId = null){
-    var res = await this.testPriming({
-      prompt: prompt, temperature: temperature, cultureId: cultureId});
+  async getAgentResponse(prompt, temperature = 0.333, options = {}){
+    var res = await this.testPriming({ ...options,
+      prompt: prompt, temperature: temperature});
     return res.data;
   }
 

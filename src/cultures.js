@@ -198,9 +198,9 @@ export async function displayAgent(agentId, cultureId) {
   if (!agent.priming) {
     agent.priming = [
       'I am an agent who knows about all kinds of stuff.',
-      'This is a two sentence post I wrote: ',
-      'I read a post `${intro_text}` and wrote a response: ',
-      'I read a post `${intro_text}` and a response `${response_text}`. When I read the response to the post I felt: ']
+      '${agent_intro}\n\rThis is a two sentence post I wrote: ',
+      '${agent_intro}\n\rI read a post `${intro_text}` and wrote a response: ',
+      '${agent_intro}\n\rI read a post `${intro_text}` and a response `${response_text}`. When I read the response to the post I felt: ']
   }
 
   let saveHandler = async function(name, priming, type, temp, image) {
@@ -332,7 +332,7 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
       let prompt = $ta.textareas.value[$ta.tabs.value];
       let temp = $temp.value;
       $$({$parent: $debug, className: 'prompt', text: '('+temp+') '+prompt});
-      const res = await services.getAgentResponse(prompt, temp, culturePath) ;
+      const res = await services.getAgentResponse(prompt, temp, {agent_intro: $ta.textareas.value[0], culture_id: culturePath}) ;
       $$({$parent: $debug, className: 'response', text: res.text});
       if (res.log) {
         res.log.forEach((log)=>{

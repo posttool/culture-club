@@ -53,8 +53,8 @@ class DataObject {
         }
       }
       delete updateMap['created'];
-      this.docRef = await updateDoc(doc(getFirestore(), this._db, this._id), updateMap);
-      return this.docRef;
+      await updateDoc(doc(getFirestore(), this._db, this._id), updateMap);
+      return this;
     } else {
       var map = {created: serverTimestamp()};
       DataObject.copyProps(this, map);

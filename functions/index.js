@@ -12,6 +12,7 @@ const db = admin.firestore();
 const bucket = admin.storage().bucket();
 
 const search = require('./search');
+const chain = require('./chain');
 
 // const MAX_AGENTS_PER_INTRO = 100;
 const STYLE = [
@@ -23,24 +24,6 @@ const STYLE = [
 
 function oneOf(a) {
   return a[Math.floor(Math.random()*a.length)];
-}
-
-function TemplateEngine(tpl, data = {}) {
-  var re = /\$\{([^\}]+)?\}/g, match;
-  while(match = re.exec(tpl)) {
-      tpl = tpl.replace(match[0], data[match[1]]);
-  }
-  return tpl;
-}
-
-function FunctionEngine(tpl, data = {}) {
-  var funcs = [];
-  var re = /\$\$(.+)?\$\$/g, match;
-  while(match = re.exec(tpl)) {
-    tpl = tpl.replace(match[0], '');
-    funcs.push(match[1])
-  }
-  return {text: tpl, funcs: funcs};
 }
 
 exports.helloWorld = functions.https.onRequest((request, response) => {
@@ -58,27 +41,33 @@ exports.helloWorld = functions.https.onRequest((request, response) => {
 //     const [url] = await bucket.file(data).getSignedUrl(options);
 //     return url;
 // });
-async function getContext(culturePath){
-  var C = {
-    culture_name: '',
-    intro_samples: [],
-    intro_text: '',
+async function getContext(culturePath, ctx = {}){
+  var C = { ...ctx, //agent_intro
+    culture_name: null,
+    culture_description: null,
     now: new Date()
   };
   if (culturePath) {
-    var culture = await db.doc(culturePath).get();
-    C.culture_name = culture.data().name;
-    var introSnap = await db.collection('introduction')
-      .where('culture', '==', culturePath)
-      .orderBy('created', 'asc').limit(3).get();
-    introSnap.docs.forEach((doc) => {
-        C.intro_samples.push(doc.data())
-    });
-    if (C.intro_samples.length != 0)
-      C.intro_text = oneOf(C.intro_samples).text;
+    var cultureSnap = await db.doc(culturePath).get();
+    var culture = cultureSnap.data();
+    C.culture_name = culture.name;
+    C.culture_description = culture.description;
   }
   return C;
 }
+
+async function addContextSamples(culturePath, ctx = {}) {
+  ctx.intro_samples = [];
+  var introSnap = await db.collection('introduction')
+    .where('culture', '==', culturePath)
+    .orderBy('created', 'asc').limit(3).get();
+  introSnap.docs.forEach((doc) => {
+      ctx.intro_samples.push(doc.data())
+  });
+  if (ctx.intro_samples.length != 0)
+    ctx.intro_text = oneOf(ctx.intro_samples).text;
+}
+
 
 exports.testPriming =  functions
   .runWith({ secrets: [openAIApiKey] })
@@ -87,17 +76,14 @@ exports.testPriming =  functions
       var e = await ___cquery(openAIApiKey.value(), p, data.temperature);
       return e.choices[0].text;
     }
-    var ctx = await getContext(data.cultureId);
-    if (data.prompt.startsWith('// chain')) {
-      var c = new Chain(data.prompt, ctx, predictF);
-      try {
-        await c.execute()
-      } catch (e) {
-      }
-      return {text: c.lastResult, log: c.log};
-    } else {
-      return {text: await predictF(TemplateEnginer(data.prompt, ctx))};
+    var ctx = await getContext(data.culture_id, data);
+    await addContextSamples(data.culture_id, ctx);
+    var c = new chain.Chain(data.prompt, ctx, predictF);
+    try {
+      await c.execute()
+    } catch (e) {
     }
+    return {text: c.lastResult, log: c.log};
   });
 
 exports.testImage = functions
@@ -107,97 +93,6 @@ exports.testImage = functions
     var e = await ___igquery(openAIApiKey.value(), prompt);
     return {url: e.data[0].url};
   });
-
-
-/**
- * chain handles input like ```
-    // chain
-
-    1.
-    True or False? ${last_post_ago} is longer than 10 minutes
-    $$rejectif False$$
-
-    2.
-    Think of a clever search around modern and contemporary music. something like mystic minimalism or aphex twin or moondog or stereolab but as a search term for music like this. the search term should be presented in quotes like "ambient music". A search term is:
-
-    3.
-    $$search ${result_2}$$
-
-    4.
-    summarize the points of the first website found in ${result_3} in a few sentences. Don't repeat anything.
-
-
-    // chain
-
-    1.
-    Post: something about flowers
-    Respond: True
-    Post: something about anything else
-    Respond: False
-    Post: `${intro_text}.
-    Respond:
-    $$rejectif False$$
-
-    2.
-    I read a post `${intro_text}` and wrote a response about flowers and butterflies and what I read:
-
-*/
-
-class Chain {
-  constructor(rawtext, context, predictionFunction) {
-    this.rawtext = rawtext;
-    this.context = context;
-    this.predictionFunction = predictionFunction;
-    this.chain = rawtext.split(/\d+\./g);
-    if (this.chain[0].startsWith('// chain'))
-      this.chain.shift();
-    this.step = 0;
-    this.results = new Array(this.chain.length);
-    this.log = [];
-  }
-  async execute(){
-    await this._exec();
-    return true;
-  }
-  async _exec() {
-    if (this.step == this.chain.length) {
-      return;
-    }
-    var p = this.chain[this.step].trim();
-    // var result = await this.predictionFunction(FunctionEngine(p, this.context));
-    var preprocessed = FunctionEngine(p, this.context);
-    var result;
-    if (preprocessed.text) {
-      var p = TemplateEngine(preprocessed.text, this.context);
-      result = String(await this.predictionFunction(p)).trim();
-      this.log.push(this.step+" t -> "+p.substring(0,512)+' '+result)
-    }
-    if (preprocessed.funcs.length != 0) {
-      let func = preprocessed.funcs[0];
-      if (func.startsWith('rejectif')) {
-        this.log.push(this.step+" rejectif -> "+func.substring(9).trim()+" "+result)
-        if (result == func.substring(9).trim()) {
-          this.log.push("REJECTED "+result)
-          throw new Error('exit', this);
-        }
-      }
-      if (func.startsWith('search') ) {
-        var arg = TemplateEngine(func.substring(7), this.context);
-        this.log.push(this.step+" search -> "+arg.substring(0,512))
-        result =  await search.googs2(arg);
-        if (result.length>2000)
-          result = result.substring(result.length-2000);
-      }
-    }
-    this.lastResult = result;
-    this.log.push(this.step+" result -> "+result);
-    this.log.push('--------------------------');
-    this.results.push(result);
-    this.context['result_'+(this.step+1)] = result;
-    this.step++;
-    await this._exec();
-  }
-}
 
 
 
@@ -294,78 +189,86 @@ exports.onCreateResponse = functions
 
 function addResponse(key, agent, intro) {
   return new Promise((resolve, reject) => {
-    var context = {
-      author_name: '*',
+    async function predictF(p) {
+      var e = await ___cquery(key, p, agent.temperature);
+      return e.choices[0].text;
+    }
+    getContext(agent.culture, {
+      agent_intro: agent.priming[0],
       intro_text: intro.text,
       created: intro.created.toDate().toString()
-    };
-    var prompt = TemplateEngine(agent.priming[0] + agent.priming[2], context);
-    ___cquery(key, prompt).then(function(e){
-      if (e.error) {
-        reject(e);
-        return;
-      }
-      // create a response and add it
-      const data = {
-        created: Firestore.FieldValue.serverTimestamp(),
-        member: 'member/'+agent.id,
-        text: e.choices[0].text,
-        stats: {
-          adopted: 0,
-          rejected: 0
-        }
-      };
-      // a sub collection in the introduction
-      const res = db
-        .collection('introduction')
-        .doc(intro.id)
-        .collection('response')
-        .add(data);
+    }).then(ctx => {
+      var c = new chain.Chain(agent.priming[2], ctx, predictF);
+      c.execute().then(result => {
+        // create a response and add it
+        const data = {
+          created: Firestore.FieldValue.serverTimestamp(),
+          member: 'member/'+agent.id,
+          text: c.lastResult,
+          log: c.log,
+          stats: {
+            adopted: 0,
+            rejected: 0
+          }
+        };
+        // a sub collection in the introduction
+        const res = db
+          .collection('introduction')
+          .doc(intro.id)
+          .collection('response')
+          .add(data);
 
-      res.then(doc => {
-        resolve(doc);
-      });
+        res.then(doc => {
+          resolve(doc);
+        });
+
+      }).catch(reject);
     });
+
+
   });
 }
 
 
 function addResponseJudgement(key, agent, intro, response) {
   return new Promise((resolve, reject) => {
-    var context = {
-      author_name: '*',
+    async function predictF(p) {
+      var e = await ___cquery(key, p, agent.temperature);
+      return e.choices[0].text;
+    }
+    getContext(agent.culture, {
+      agent_intro: agent.priming[0],
       intro_text: intro.text,
       response_text: response.text,
       created: response.created.toDate().toString()
-    };
-    var prompt = TemplateEngine(agent.priming[0] + agent.priming[3], context);
-    ___cquery(key, prompt).then(function(e){
-      if (e.error) {
-        reject(e);
-        return;
-      }
-      // create a response and add it
-      const data = {
-        created: Firestore.FieldValue.serverTimestamp(),
-        member: 'member/'+agent.id,
-        text: e.choices[0].text,
-        stats: {
-          adopted: 0,
-          rejected: 0
-        }
-      };
-      // a sub collection in the introduction
-      const res = db
-        .collection('introduction')
-        .doc(intro.id)
-        .collection('response')
-        .doc(response.id)
-        .collection('response')
-        .add(data);
+    }).then(ctx => {
+      var c = new chain.Chain(agent.priming[3], ctx, predictF);
+      c.execute().then(result => {
 
-      res.then(doc => {
-        // console.log(doc)
-        resolve(doc);
+        // create a response and add it
+        const data = {
+          created: Firestore.FieldValue.serverTimestamp(),
+          member: 'member/'+agent.id,
+          text: c.lastResult,
+          log: c.log,
+          stats: {
+            adopted: 0,
+            rejected: 0
+          }
+        };
+        // a sub collection in the introduction
+        const res = db
+          .collection('introduction')
+          .doc(intro.id)
+          .collection('response')
+          .doc(response.id)
+          .collection('response')
+          .add(data);
+
+        res.then(doc => {
+          // console.log(doc)
+          resolve(doc);
+        });
       });
     });
   });
@@ -377,7 +280,7 @@ exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun(
   let cultureQuery = db.collection('culture')
     .orderBy('created', 'asc');
 
-  agentQuery.stream().on('data', (doc) => {
+  cultureQuery.stream().on('data', (doc) => {
     let culture = doc.data();
     culture.id = doc.id;
     if (culture) {
