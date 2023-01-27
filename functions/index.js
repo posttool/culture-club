@@ -11,7 +11,6 @@ admin.initializeApp();
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
 
-const search = require('./search');
 const chain = require('./chain');
 
 // const MAX_AGENTS_PER_INTRO = 100;
@@ -145,7 +144,7 @@ exports.onCreateIntroduction = functions
     agentQuery.stream().on('data', (doc) => {
       var agent = doc.data();
       agent.id = doc.id;
-      if (agent.priming[3] && 'member/' + agent.id != intro.member) {
+      if ('member/' + agent.id != intro.member) {
         ___queue(function() {
           return addResponse(openAIApiKey.value(), agent, intro);
         });
@@ -174,7 +173,7 @@ exports.onCreateResponse = functions
         agentQuery.stream().on('data', (doc) => {
           var agent = doc.data();
           agent.id = doc.id;
-          if (agent.priming[3] && 'member/' + agent.id != response.member) {
+          if ('member/' + agent.id != response.member) {
             ___queue(function() {
               return addResponseJudgement(openAIApiKey.value(), agent, intro, response);
             });
@@ -244,7 +243,6 @@ function addResponseJudgement(key, agent, intro, response) {
     }).then(ctx => {
       var c = new chain.Chain(agent.priming[3], ctx, predictF);
       c.execute().then(result => {
-
         // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
