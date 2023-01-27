@@ -348,11 +348,11 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   // $form.appendChild(labeled('Type', $type));
 
   // temperature slider
-  var $temp = $$({el: 'input', type: 'range', value: props.temp});
+  var $temp = $$({el: 'input', type: 'range'});
   $temp.setAttribute('min', 0)
   $temp.setAttribute('max', 1)
   $temp.setAttribute('step', .05);
-  $temp.setAttribute('value', .35);
+  $temp.setAttribute('value', props.temperature);
   $form.appendChild(labeled('Temp', $temp));
 
 
