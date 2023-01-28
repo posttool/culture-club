@@ -13,6 +13,8 @@ const bucket = admin.storage().bucket();
 
 const chain = require('./chain');
 
+const MODEL = "text-davinci-003";
+// const MODEL = "text-curie-001";
 // const MAX_AGENTS_PER_INTRO = 100;
 const STYLE = [
   'jeff koons',
@@ -26,9 +28,12 @@ function oneOf(a) {
 }
 
 exports.helloWorld = functions.https.onRequest((request, response) => {
-  search.googs2('mystic minimalist music').then(results => {
-    response.send("Hello  !" + results);
-  })
+  // search.googs2('mystic minimalist music').then(results => {
+  //   response.send("Hello  !" + results);
+  // })
+  getAll().then(o => {
+    response.json(o);
+  });
 });
 
 // exports.getUrl = functions.https.onCall(async (data, context) => {
@@ -90,7 +95,7 @@ exports.testPriming = functions
 exports.testImage = functions
   .runWith({ secrets: [openAIApiKey] })
   .https.onCall(async (data, context) => {
-    var prompt = data.prompt  + ' ' + data.xtra;
+    var prompt = data.prompt + ' ' + data.xtra;
     const e = await ___igquery(openAIApiKey.value(), prompt.trim());
     return { url: e.data[0].url };
   });
@@ -104,18 +109,17 @@ exports.updateImage = functions
     agent.id = agentSnap.id;
     const url = await createImageForAgent(openAIApiKey.value(), agent, data.xtra);
     const r = await agentDoc.update({ image: url });
-    console.log(r);
     return { url: url };
   });
 
 async function createImageForAgent(key, member, xtra) {
-  var prompt = member.name + ' ' +xtra;
-  console.log('create '+prompt);
+  var prompt = member.name + ' ' + xtra;
+  console.log('create ' + prompt);
   var e = await ___igquery(key, prompt.trim());
   let fimg = await fetch(e.data[0].url)
   let fimgb = Buffer.from(await fimg.arrayBuffer());
   //copy to storageBucket
-  const morepath = Math.floor(Math.random()*10000000000);
+  const morepath = Math.floor(Math.random() * 10000000000);
   const filePath = `${member.id}/${morepath}/user-pic.jpg`;
   const file = bucket.file(filePath);
   await file.save(fimgb);
@@ -148,8 +152,6 @@ exports.onCreateIntroduction = functions
   .onCreate((change, context) => {
     var intro = change.data();
     intro.id = context.params.docId;
-    functions.logger.info(intro);
-
     let agentQuery = db.collection('member')
       .where('culture', '==', intro.culture)
       .orderBy('created', 'asc');
@@ -163,8 +165,8 @@ exports.onCreateIntroduction = functions
         });
       }
     }).on('end', () => {
-      return true;
     });
+    return true;
   });
 
 exports.onCreateResponse = functions
@@ -192,9 +194,8 @@ exports.onCreateResponse = functions
             });
           }
         }).on('end', () => {
-          return true;
         });
-
+        return true;
       });
   });
 
@@ -264,7 +265,7 @@ function addResponseJudgement(key, agent, intro, response) {
           reject();
           return;
         }
-       // create a response and add it
+        // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
           member: 'member/' + agent.id,
@@ -294,8 +295,8 @@ function addResponseJudgement(key, agent, intro, response) {
 }
 
 
-exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun((context) => {
-  functions.logger.info('This will be run every 30 seconds!');
+exports.scheduledFunction = functions.pubsub.schedule('* * * * 2').onRun((context) => {
+  functions.logger.info('This will be run every 2 minutes!');
   let cultureQuery = db.collection('culture')
     .orderBy('created', 'asc');
 
@@ -304,7 +305,7 @@ exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun(
     culture.id = doc.id;
     if (culture) {
       // addIntro(openAIApiKey.value(), agent);
-      functions.logger.info('   ' + aculture.name + ' wants to hear from its agents!');
+      functions.logger.info('   ' + culture.name + ' wants to hear from its agents!');
     }
   }).on('end', () => {
     console.log(`end`);
@@ -313,19 +314,22 @@ exports.scheduledFunction = functions.pubsub.schedule('every 30 seconds').onRun(
   return true;
 });
 
-exports.startPromptingAgentsForCulture = functions.https.onRequest((request, response) => {
-  if (!request.query.id)
-    throw new Error('need id')
-  promptAgents(request.query.id);
-  response.send("OK " + request.query.id);
-});
+// exports.startPromptingAgentsForCulture = functions.https.onRequest((request, response) => {
+//   if (!request.query.id)
+//     throw new Error('need id')
+//   promptAgents(open api key, request.query.id);
+//   response.send("OK " + request.query.id);
+// });
 
-exports.callAgentsForCulture = functions.https.onCall((data, context) => {
-  promptAgents(data);
-  return true;
-});
+exports.callAgentsForCulture = functions
+  .runWith({ secrets: [openAIApiKey] })
+  .https.onCall((data, context) => {
+    functions.logger.info('callAgentsForCulture ' + data);
+    promptAgents(openAIApiKey.value(), data);
+    return true;
+  });
 
-function promptAgents(cultureId) {
+function promptAgents(key, cultureId) {
   if (!cultureId.startsWith('culture/')) {
     cultureId = 'culture/' + cultureId;
   }
@@ -335,15 +339,12 @@ function promptAgents(cultureId) {
 
   agentQuery.stream().on('data', (doc) => {
     let agent = doc.data();
-    let agentId = agent.id = doc.id;
-    if (agent.priming[1]) {
-      ___queue(function () {
-        return addIntro(openAIApiKey.value(), agent);
-      });
-    }
-
+    agent.id = doc.id;
+    functions.logger.info('   prompt agent ' + agent.id);
+    ___queue(function () {
+      return addIntro(key, agent);
+    });
   }).on('end', () => {
-    console.log(`end`);
   });
 }
 
@@ -358,6 +359,10 @@ function addIntro(key, agent) {
     }).then(ctx => {
       var c = new chain.Chain(agent.priming[1], ctx, predictF);
       c.execute().then(result => {
+        if (!c.lastResult) {
+          reject();
+          return;
+        }
         // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
@@ -385,7 +390,7 @@ function addIntro(key, agent) {
 }
 
 
-async function ___cquery(openai_api_key, prompt) {
+async function ___cquery(openai_api_key, prompt, temperature) {
   const requestOptions = {
     method: 'POST',
     headers: {
@@ -393,8 +398,8 @@ async function ___cquery(openai_api_key, prompt) {
       'Authorization': 'Bearer ' + openai_api_key
     },
     body: JSON.stringify({
-      "model": "text-davinci-003",
-      "temperature": 0.35,
+      "model": MODEL,
+      "temperature": Number(temperature),
       "max_tokens": 128,
       "top_p": 1,
       "frequency_penalty": 0,
@@ -445,14 +450,15 @@ function __checkQ() {
     return;
   }
   __working = true;
+  functions.logger.info('q working ' + __q.length);
   var f = __q.pop();
   f()
     .then((e) => {
-      console.log("q finished work  "+ __q.length)
+      console.log("q finished work  " + __q.length)
       __checkQ();
     })
     .catch((err) => {
-      console.log("q reject "+ __q.length);
+      console.log("q reject " + __q.length);
       __checkQ();
     });;
 }
@@ -491,4 +497,53 @@ async function deleteQueryBatch(db, query, resolve) {
   process.nextTick(() => {
     deleteQueryBatch(db, query, resolve);
   });
+}
+
+
+async function getAll() {
+  var memberSnapshot = await db.collection('member').get();
+  var memberHash = {}
+  memberSnapshot.docs.forEach((doc) => {
+    memberHash[doc.id] = doc.data();
+  });
+  var culturesSnapshot = await db.collection('culture').get();
+  var cultures = [];
+  culturesSnapshot.docs.forEach((cultureDoc) => {
+    let culture = cultureDoc.data();
+    culture.id = cultureDoc.id;
+    cultures.push(culture);
+  });
+  var intros = [];
+  var introHash = {};
+  let introSnapshot = await db.collection('introduction')
+    .orderBy('created', 'asc').get();
+  introSnapshot.docs.forEach(async (introDoc) => {
+    let intro = introDoc.data();
+    intro.id = introDoc.id;
+    intro.responses = [];
+    intros.push(intro);
+    introHash[intro.id] = intro;
+  });
+  for (var i = 0; i < intros.length; i++) {
+    let intro = intros[i];
+    let respSnapshot = await db.collection('introduction').doc(intro.id)
+      .collection('response').get()
+    for (var j = 0; j < respSnapshot.docs.length; j++) {
+      let respDoc = respSnapshot.docs[j];
+      let response = respDoc.data();
+      response.id = respDoc.id;
+      response.responses = [];
+      introHash[intro.id].responses.push(response);
+      let resprespSnapshot = await db.collection('introduction').doc(intro.id)
+        .collection('response').doc(response.id).collection('response').get();
+      for (var k = 0; k < resprespSnapshot.docs.length; k++) {
+        let resprespDoc = resprespSnapshot.docs[k];
+        let respresp = resprespDoc.data();
+        respresp.id = resprespDoc.id;
+        response.responses.push(respresp);
+      }
+    }
+  }
+
+  return { cultures: cultures, members: memberHash, intros: intros };
 }

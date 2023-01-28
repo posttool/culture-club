@@ -581,7 +581,7 @@ function getStorageUrl(path) {
     return '';
   if (path.indexOf('http') == 0)
     return path;
-  return 'http://storage.googleapis.com/' + getFirebaseConfig().storageBucket + '/' + path;
+  return 'https://storage.googleapis.com/' + getFirebaseConfig().storageBucket + '/' + path;
 }
 
 function divId(prefix) {

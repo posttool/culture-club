@@ -380,7 +380,7 @@ body {
 .twoColumn>.col2 {
   margin: 10px;
   font-size: 14px;
-  width: 100%;
+  width: calc(100% - 116px);
 }
 
 .col2 .author {
@@ -393,7 +393,7 @@ body {
 }
 
 .col2 .text {
-  padding: 8px 13% 20px 0;
+  padding: 8px 40px 20px 0;
 }
 
 
