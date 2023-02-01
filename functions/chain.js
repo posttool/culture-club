@@ -1,4 +1,3 @@
-const search = require('./search');
 
 /**
  * chain handles input like ```
@@ -45,12 +44,12 @@ const search = require('./search');
 */
 
 class Chain {
-  constructor(rawtext, context, predictionFunction) {
+  constructor(rawtext, context, services) {
     if (!rawtext.startsWith('// chain'))
       rawtext = "// chain\n\r1.\n\r" + rawtext;
     this.rawtext = rawtext;
     this.context = context;
-    this.predictionFunction = predictionFunction;
+    this.services = services;
     this.chain = rawtext.split(/\d+\./g);
     if (this.chain[0].startsWith('// chain'))
       this.chain.shift();
@@ -72,7 +71,7 @@ class Chain {
     var result;
     if (preprocessed.text) {
       var p = TemplateEngine(preprocessed.text, this.context).trim();
-      result = String(await this.predictionFunction(p)).trim();
+      result = String(await this.services.predict(p)).trim();
       this.log.push(this.step + " t -> " + p.substring(0, 512))
     }
     if (preprocessed.funcs.length != 0) {
@@ -83,7 +82,7 @@ class Chain {
         return;
       }
       if (func.startsWith('rejectif ')) {
-        this.log.push(this.step + " rejectif -> " + func.substring(9).trim()+ " -> " + result)
+        this.log.push(this.step + " rejectif -> " + func.substring(9).trim() + " -> " + result)
         if (result.startsWith(func.substring(9).trim())) {
           this.log.push("exiting " + result)
           // throw new Error('exit', this);
@@ -93,9 +92,10 @@ class Chain {
       if (func.startsWith('search ')) {
         var arg = TemplateEngine(func.substring(7), this.context);
         this.log.push(this.step + " search -> " + arg.substring(0, 512))
-        result = await search.googs2(arg);
-        if (result.length > 2000)
-          result = result.substring(result.length - 2000);
+        let searchResults = await this.services.search(arg);
+        result = searchResults.map(r => {
+          return r.snippet;
+        }).join('\r\n');
       }
     }
     this.lastResult = result;

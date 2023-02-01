@@ -1,7 +1,12 @@
+
+const { google } = require('googleapis');
+const customsearch = google.customsearch('v1');
+
 const { Firestore } = require('@google-cloud/firestore');
 const functions = require("firebase-functions");
 const { defineSecret } = require('firebase-functions/params');
 const openAIApiKey = defineSecret('OPENAI_API_KEY');
+const googleSearchKey = defineSecret('GOOGLE_SEARCH_KEY');
 
 
 // The Firebase Admin SDK to access Firestore.
@@ -35,6 +40,18 @@ exports.helloWorld = functions.https.onRequest((request, response) => {
     response.json(o);
   });
 });
+
+exports.testSearch = functions
+  .runWith({ secrets: [googleSearchKey] })
+  .https.onRequest((req, res) => {
+    customsearch.cse.list({
+      cx: 'b31b5c857da0046b8',
+      q: 'howdee',
+      auth: googleSearchKey.value(),
+    }).then(r => {
+      res.json(r.data);
+    });
+  });
 
 // exports.getUrl = functions.https.onCall(async (data, context) => {
 //     const options = {
@@ -74,17 +91,31 @@ async function addContextSamples(culturePath, ctx = {}) {
     ctx.intro_text = oneOf(ctx.intro_samples).text;
 }
 
+function getServices(openai, temp, google) {
+  return {
+    predict: async p => {
+      var e = await ___cquery(openai, p, temp);
+      return e.choices[0].text;
+    },
+    search: async q => {
+      var result = await customsearch.cse.list({
+        cx: 'b31b5c857da0046b8',
+        q: q,
+        auth: google,
+      });
+      //console.log(result.data.items);
+      return result.data.items;
+    }
+  }
+}
 
 exports.testPriming = functions
-  .runWith({ secrets: [openAIApiKey] })
+  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
   .https.onCall(async (data, context) => {
-    async function predictF(p) {
-      var e = await ___cquery(openAIApiKey.value(), p, data.temperature);
-      return e.choices[0].text;
-    }
+    const services = getServices(openAIApiKey.value(), data.temp, googleSearchKey.value());
     var ctx = await getContext(data.culture_id, data);
     await addContextSamples(data.culture_id, ctx);
-    var c = new chain.Chain(data.prompt, ctx, predictF);
+    var c = new chain.Chain(data.prompt, ctx, services);
     try {
       await c.execute()
     } catch (e) {
@@ -116,7 +147,8 @@ async function createImageForAgent(key, member, xtra) {
   var prompt = member.name + ' ' + xtra;
   console.log('create ' + prompt);
   var e = await ___igquery(key, prompt.trim());
-  let fimg = await fetch(e.data[0].url)
+  // if e.error ...
+  let fimg = await fetch(e.data[0].url);
   let fimgb = Buffer.from(await fimg.arrayBuffer());
   //copy to storageBucket
   const morepath = Math.floor(Math.random() * 10000000000);
@@ -127,7 +159,7 @@ async function createImageForAgent(key, member, xtra) {
 }
 
 // exports.onCreateMember = functions
-//   .runWith({ secrets: [openAIApiKey] })
+//   .runWith({ secrets: [openAIApiKe, googleSearchKey] })
 //   .firestore.document('/member/{docId}')
 //   .onCreate(async (change, context) => {
 //     const member = change.data();
@@ -147,7 +179,7 @@ async function createImageForAgent(key, member, xtra) {
 
 // When an introduction is created, fire up all the agents...
 exports.onCreateIntroduction = functions
-  .runWith({ secrets: [openAIApiKey] })
+  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
   .firestore.document('/introduction/{docId}')
   .onCreate((change, context) => {
     var intro = change.data();
@@ -161,7 +193,7 @@ exports.onCreateIntroduction = functions
       agent.id = doc.id;
       if ('member/' + agent.id != intro.member) {
         ___queue(function () {
-          return addResponse(openAIApiKey.value(), agent, intro);
+          return addResponse(openAIApiKey.value(), googleSearchKey.value(), agent, intro);
         });
       }
     }).on('end', () => {
@@ -170,7 +202,7 @@ exports.onCreateIntroduction = functions
   });
 
 exports.onCreateResponse = functions
-  .runWith({ secrets: [openAIApiKey] })
+  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
   .firestore.document('/introduction/{introId}/response/{responseId}')
   .onCreate((change, context) => {
     var response = change.data();
@@ -190,7 +222,7 @@ exports.onCreateResponse = functions
           agent.id = doc.id;
           if ('member/' + agent.id != response.member) {
             ___queue(function () {
-              return addResponseJudgement(openAIApiKey.value(), agent, intro, response);
+              return addResponseJudgement(openAIApiKey.value(), googleSearchKey.value(), agent, intro, response);
             });
           }
         }).on('end', () => {
@@ -200,18 +232,15 @@ exports.onCreateResponse = functions
   });
 
 
-function addResponse(key, agent, intro) {
+function addResponse(predictionKey, searchKey, agent, intro) {
   return new Promise((resolve, reject) => {
-    async function predictF(p) {
-      var e = await ___cquery(key, p, agent.temperature);
-      return e.choices[0].text;
-    }
+    const services = getServices(predictionKey, agent.temperature, searchKey);
     getContext(agent.culture, {
       agent_intro: agent.priming[0],
       intro_text: intro.text,
       created: intro.created.toDate().toString()
     }).then(ctx => {
-      var c = new chain.Chain(agent.priming[2], ctx, predictF);
+      var c = new chain.Chain(agent.priming[2], ctx, services);
       c.execute().then(result => {
         if (!c.lastResult) {
           reject();
@@ -247,19 +276,16 @@ function addResponse(key, agent, intro) {
 }
 
 
-function addResponseJudgement(key, agent, intro, response) {
+function addResponseJudgement(predictionKey, searchKey, agent, intro, response) {
   return new Promise((resolve, reject) => {
-    async function predictF(p) {
-      var e = await ___cquery(key, p, agent.temperature); //might pass along resolve reject instead
-      return e.choices[0].text;
-    }
+    const services = getServices(predictionKey, agent.temperature, searchKey);
     getContext(agent.culture, {
       agent_intro: agent.priming[0],
       intro_text: intro.text,
       response_text: response.text,
       created: response.created.toDate().toString()
     }).then(ctx => {
-      var c = new chain.Chain(agent.priming[3], ctx, predictF);
+      var c = new chain.Chain(agent.priming[3], ctx, services);
       c.execute().then(result => {
         if (!c.lastResult) {
           reject();
@@ -294,7 +320,6 @@ function addResponseJudgement(key, agent, intro, response) {
   });
 }
 
-
 exports.scheduledFunction = functions.pubsub.schedule('* * * * 2').onRun((context) => {
   functions.logger.info('This will be run every 2 minutes!');
   let cultureQuery = db.collection('culture')
@@ -303,10 +328,8 @@ exports.scheduledFunction = functions.pubsub.schedule('* * * * 2').onRun((contex
   cultureQuery.stream().on('data', (doc) => {
     let culture = doc.data();
     culture.id = doc.id;
-    if (culture) {
-      // addIntro(openAIApiKey.value(), agent);
-      functions.logger.info('   ' + culture.name + ' wants to hear from its agents!');
-    }
+    // addIntro(openAIApiKey.value(), agent);
+    functions.logger.info('   ' + culture.name + ' wants to hear from its agents!');
   }).on('end', () => {
     console.log(`end`);
   });
@@ -314,22 +337,15 @@ exports.scheduledFunction = functions.pubsub.schedule('* * * * 2').onRun((contex
   return true;
 });
 
-// exports.startPromptingAgentsForCulture = functions.https.onRequest((request, response) => {
-//   if (!request.query.id)
-//     throw new Error('need id')
-//   promptAgents(open api key, request.query.id);
-//   response.send("OK " + request.query.id);
-// });
-
 exports.callAgentsForCulture = functions
-  .runWith({ secrets: [openAIApiKey] })
+  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
   .https.onCall((data, context) => {
     functions.logger.info('callAgentsForCulture ' + data);
-    promptAgents(openAIApiKey.value(), data);
+    promptAgents(openAIApiKey.value(), googleSearchKey.value(), data);
     return true;
   });
 
-function promptAgents(key, cultureId) {
+function promptAgents(predictionKey, searchKey, cultureId) {
   if (!cultureId.startsWith('culture/')) {
     cultureId = 'culture/' + cultureId;
   }
@@ -340,26 +356,25 @@ function promptAgents(key, cultureId) {
   agentQuery.stream().on('data', (doc) => {
     let agent = doc.data();
     agent.id = doc.id;
-    functions.logger.info('   prompt agent ' + agent.id);
+    functions.logger.info('   prompt agent ' + agent.name+ ' ' +agent.id);
     ___queue(function () {
-      return addIntro(key, agent);
+      return addIntro(predictionKey, searchKey, agent);
     });
   }).on('end', () => {
   });
 }
 
-function addIntro(key, agent) {
+function addIntro(predictionKey, searchKey, agent) {
   return new Promise((resolve, reject) => {
-    async function predictF(p) {
-      var e = await ___cquery(key, p, agent.temperature);
-      return e.choices[0].text;
-    }
+    const services = getServices(predictionKey, agent.temperature, searchKey);
     getContext(agent.culture, {
       agent_intro: agent.priming[0]
     }).then(ctx => {
-      var c = new chain.Chain(agent.priming[1], ctx, predictF);
+      var c = new chain.Chain(agent.priming[1], ctx, services);
       c.execute().then(result => {
         if (!c.lastResult) {
+          console.log('error?');
+          console.log(c.logs)
           reject();
           return;
         }
