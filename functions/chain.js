@@ -44,10 +44,11 @@
 */
 
 class Chain {
-  constructor(rawtext, context, services) {
+  constructor(rawtext, temperature, context, services) {
     if (!rawtext.startsWith('// chain'))
       rawtext = "// chain\n\r1.\n\r" + rawtext;
     this.rawtext = rawtext;
+    this.temperature = temperature;
     this.context = context;
     this.services = services;
     this.chain = rawtext.split(/\d+\./g);
@@ -71,7 +72,7 @@ class Chain {
     var result;
     if (preprocessed.text) {
       var p = TemplateEngine(preprocessed.text, this.context).trim();
-      result = String(await this.services.predict(p)).trim();
+      result = String(await this.services.predict(p, this.temperature)).trim();
       this.log.push(this.step + " t -> " + p.substring(0, 512))
     }
     if (preprocessed.funcs.length != 0) {

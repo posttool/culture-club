@@ -36,22 +36,18 @@ export function initDisplay(functions) {
 export async function displayCultures() {
   var $root = $('root').children[1];
   var $div = $$({ $parent: $root });
-  if (Member.current) {
-    var $cultureHeader = $$({ $parent: $div, className: 'padded' });
-    var $cultureList = $$({ $parent: $div, id: 'culture-list' });
-    var $cultureOptions = $$({ $parent: $div, id: 'culture-options' });
+  var $cultureHeader = $$({ $parent: $div, className: 'padded' });
+  var $cultureList = $$({ $parent: $div, id: 'culture-list' });
+  var $cultureOptions = $$({ $parent: $div, id: 'culture-options' });
 
-    $$({ $parent: $cultureHeader, el: 'h2', text: 'Cultures' });
-    $$({
-      $parent: $cultureOptions, el: 'button', text: 'Create Culture',
-      click: displayCultureForm
-    });
+  $$({ $parent: $cultureHeader, el: 'h2', text: 'Cultures' });
+  $$({
+    $parent: $cultureOptions, el: 'button', text: 'Create Culture',
+    click: displayCultureForm
+  });
 
-    const culture = new Culture();
-    culture.all(divFactory($cultureList, factoryCultureCell));
-  } else {
-    $div.appendChild($$({ text: 'Welcome. Log in at the bottom left corner.' }))
-  }
+  const culture = new Culture();
+  culture.all(divFactory($cultureList, factoryCultureCell));
 }
 
 function factoryCultureCell(data) {
@@ -119,14 +115,17 @@ export async function displayCulture(id) {
         location.href = 'agent.html?culture=' + id;
       }
     });
-    // make agents talk
-    $$({
-      el: 'i', text: 'arrow_circle_right', className: 'material-symbols-outlined add-agent',
-      $parent: $agentButtons, click: function () {
-        // displayAgentForm(culture);
-        services.startAgents(id);
-      }
-    });
+    if (window.location.hostname.includes("localhost") || Member.current.email == 'david@posttool.com') {
+      // make agents talk
+      $$({
+        el: 'i', text: 'arrow_circle_right', className: 'material-symbols-outlined add-agent',
+        $parent: $agentButtons, click: function () {
+          // displayAgentForm(culture);
+          services.startAgents(id);
+        }
+      });
+    }
+
     //  list agents for culture
     const agent = new Agent();
     await agent.some('culture', '==', culture.path(),
@@ -176,7 +175,7 @@ function factoryIntroCell(intro) {
 
 // AGENT page
 export async function displayAgent(agentId, cultureId) {
-  const agent = new Agent();
+  var agent = new Agent();
   if (agentId) {
     await agent.get(agentId);
   }
@@ -202,7 +201,7 @@ export async function displayAgent(agentId, cultureId) {
       agent.priming = priming;
       agent.temperature = temp;
       agent.save().then(r => {
-        console.log(r);
+        window.history.pushState({}, 'Agent: ' + agent.name, 'agent.html?id=' + agent._id);
         resolve(r);
       });
     })
@@ -316,7 +315,7 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   var $regenExtra = $$({ $parent: $nameRow, el: 'input', className: 'image-extras' });
   $regenExtra.setAttribute('placeholder', 'extra image attributes');
   $regen.addEventListener('click', (e) => {
-    $debug.log('prompt', 'Generating proto image for "' + $input.value +' ' +$regenExtra.value + '"');
+    $debug.log('prompt', 'Generating proto image for "' + $input.value + ' ' + $regenExtra.value + '"');
     if (props.id) {
       services.updateAgentImage(props.id, $regenExtra.value).then((res) => {
         $debug.log('response', 'Complete.');
@@ -378,7 +377,8 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
     return true;
   }
 
-  let saveLabel = props.id ? 'Update' : 'Submit';
+  var genImage = props.image == null;
+  var saveLabel = props.id ? 'Update' : 'Submit';
   var $submit = $$({
     el: 'button', text: saveLabel, $parent: $formButtons, click: function () {
       if (validate()) {
@@ -387,13 +387,20 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
           $submit.removeAttribute('disabled');
           $submit.innerText = 'Update';
           $debug.log('response', 'Save complete.');
-          if (!props.image) {
+          props = e;
+          if (genImage) {
+            $submit.setAttribute('disabled', 'disabled');
             $debug.log('response', 'Generating image.');
-            services.updateAgentImage(e.id, $regenExtra.value).then((res) => {
+            services.updateAgentImage(e._id, $regenExtra.value).then((res) => {
+              $submit.removeAttribute('disabled');
               $debug.log('response', 'Complete.');
               $image.img.src = getStorageUrl(res.url);
+              genImage = false;
+            }).catch(e => {
+              $submit.removeAttribute('disabled');
+              $debug.log('response', 'error. ' + e);
             });
-            }
+          }
         });
       }
     }
@@ -605,8 +612,6 @@ function hideModal() {
   }
 }
 
-
-
 function backToCulture(culture) {
   var $h2 = $$({
     el: 'h2', className: 'nav padded', click: function () {
@@ -737,7 +742,11 @@ function twoColPost($el, data, countResponsePath, style) {
             $responseCount.innerText = Number($responseCount.innerText) + 1;
             if (style == 1) {
               let nestedResponse = change.doc.data();
-              let $nrel = $$({ $parent: $responseText, className: 'preview' });
+              let $nrel = $$({
+                $parent: $responseText, className: 'preview', click: e => {
+                  $nrel.style.height = 'auto';
+                }
+              });
               let $imgel = $$({ $parent: $nrel, el: 'span' });
               $$({ $parent: $nrel, text: nestedResponse.text, el: 'span' });
               getMember(nestedResponse.member, function (member) {

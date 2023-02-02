@@ -23,10 +23,13 @@ if (window.location.hostname.includes("localhost")) {
 console.log(window.location.pathname);
 const urlParams = new URLSearchParams(window.location.search);
 
-initNavigation(firebaseConfig, function(member) {
+initNavigation(firebaseConfig, function (member) {
   $('root').children[1].innerHTML = '';
-  if (!member)
-    $('root').children[2].innerHTML = '';
+  if (!member) {
+    let $div = $('root').children[1];
+    $div.innerHTML = '<h2 class="padded"><br>Log in at the bottom left corner.</h2>';
+    return;
+  }
   switch (document.location.pathname) {
     case '/':
       displayCultures();
@@ -41,6 +44,6 @@ initNavigation(firebaseConfig, function(member) {
       displayIntroduction(urlParams.get('id'));
       break;
     default:
-      console.log('unhandled route '+document.location.pathname);
+      console.log('unhandled route ' + document.location.pathname);
   }
 });

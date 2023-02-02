@@ -8,6 +8,7 @@ import {
   limit,
   onSnapshot,
   getDocs,
+  setDoc,
   updateDoc,
   doc,
   getDoc,
@@ -41,45 +42,57 @@ class DataObject {
     return this._db + '/' + this._id;
   }
 
+  getCollectionRef() {
+    return collection(getFirestore(), this._db);
+  }
+
+  getDocRef() {
+    return doc(getFirestore(), this._db, this._id);
+  }
+
   async save() {
-    if (this.docRef) {
+    if (this.doc) {
       console.log("an update");
-      var origData = this.docRef.data();
+      if (!this.doc.data) {
+        this.doc = await getDoc(this.getDocRef());
+        this._id = this.doc.id;
+      }
+      var origData = this.doc.data();
       var updateMap = {};
       for (var p in origData) {
-        if (origData[p] != this[p]) {
+        if (this[p] && !(this[p] instanceof DataObject) && origData[p] != this[p]) {
           updateMap[p] = this[p];
         }
       }
       delete updateMap['created'];
-      await updateDoc(doc(getFirestore(), this._db, this._id), updateMap);
+      console.log(updateMap)
+      await updateDoc(this.getDocRef(), updateMap);
       return this;
     } else {
-      var map = { created: serverTimestamp() };
+      var map = {created: serverTimestamp()};
       DataObject.copyProps(this, map);
-      this.docRef = await addDoc(collection(getFirestore(), this._db), map);
-      this.created = this.docRef.created; //TODO verify
-      this._id = this.docRef.id;
-      return this.docRef;
+      this.doc = await addDoc(this.getCollectionRef(), map);
+      this.created = this.doc.created; //TODO verify
+      this._id = this.doc.id;
+      return this;
     }
   }
 
   async get(id) {
     if (id.indexOf(this._db) == 0)
-      id = id.substring(this._db.length + 1);
+      id = id.substring(this._db.length+1);
     this._id = this.id = id; // maybe choose the one without the underscore :)
-    const docRef = doc(getFirestore(), this._db, this._id);
     try {
-      this.docRef = await getDoc(docRef);
-      if (this.docRef.exists()) {
-        var d = this.docRef.data();
+      this.doc = await getDoc(this.getDocRef());
+      if (this.doc.exists()) {
+        var d = this.doc.data();
         DataObject.copyProps(d, this);
         return d;
       } else {
         console.log("Document does not exist");
         return null;
       }
-    } catch (error) {
+    } catch(error) {
       console.log(error)
       return null;
     }
@@ -87,18 +100,18 @@ class DataObject {
 
   all(changeHandler) {
     var self = this;
-    const c = collection(getFirestore(), self._db);
+    const c = this.getCollectionRef();
     const q = query(c, orderBy('created', 'asc'), limit(LIMIT));
     if (changeHandler) {
       // let unsubscribe =
       onSnapshot(q,
-        function (snapshot) {
+        function(snapshot) {
           // console.log('ALL '+self._db+' snapshot / ');
-          snapshot.docChanges().forEach(function (change) {
+          snapshot.docChanges().forEach(function(change) {
             changeHandler(change);
           });
-        }, function (e) {
-          console.error('snapshot error ' + self._db);
+        }, function(e){
+          console.error('snapshot error '+self._db);
           console.error(e);
         });
     }
@@ -107,18 +120,18 @@ class DataObject {
 
   some(w1, w2, w3, changeHandler) {
     var self = this;
-    const c = collection(getFirestore(), self._db);
+    const c = this.getCollectionRef();
     const q = query(c, where(w1, w2, w3), orderBy('created', 'asc'), limit(LIMIT));
     if (changeHandler) {
       // let unsubscribe =
       onSnapshot(q,
-        function (snapshot) {
+        function(snapshot) {
           // console.log('SOME '+self._db+' snapshot / ');
-          snapshot.docChanges().forEach(function (change) {
+          snapshot.docChanges().forEach(function(change) {
             changeHandler(change);
           });
-        }, function (e) {
-          console.error('snapshot error ' + self._db);
+        }, function(e){
+          console.error('snapshot error '+self._db);
           console.error(e);
         });
     }
@@ -129,7 +142,7 @@ class DataObject {
 
 
 export class Culture extends DataObject {
-  constructor(member, name, description, image) {
+  constructor(member, name, description, image){
     super('culture');
     this.member = member;
     this.name = name;
@@ -142,7 +155,7 @@ export class Culture extends DataObject {
 //static current
 //static cached
 export class Member extends DataObject {
-  constructor(user) {
+  constructor(user){
     super('member');
     this.user = user;
     if (user) {
