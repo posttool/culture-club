@@ -1,4 +1,3 @@
-
 const { google } = require('googleapis');
 const customsearch = google.customsearch('v1');
 
@@ -32,26 +31,12 @@ function oneOf(a) {
   return a[Math.floor(Math.random() * a.length)];
 }
 
-exports.helloWorld = functions
+exports.localUtility = functions
   .runWith({ secrets: [openAIApiKey, googleSearchKey] })
   .https.onRequest((request, response) => {
-    // getAll().then(o => {
-    //   response.json(o);
-    // });
+    // getAll().then(o => { response.json(o); });
     _processQ(getServices(openAIApiKey.value(), googleSearchKey.value()));
-    return true;
-  });
-
-exports.testSearch = functions
-  .runWith({ secrets: [googleSearchKey] })
-  .https.onRequest((req, res) => {
-    customsearch.cse.list({
-      cx: 'b31b5c857da0046b8',
-      q: 'howdee',
-      auth: googleSearchKey.value(),
-    }).then(r => {
-      res.json(r.data);
-    });
+    response.json({ message: 'ok' });
   });
 
 // exports.getUrl = functions.https.onCall(async (data, context) => {
@@ -63,6 +48,68 @@ exports.testSearch = functions
 //     const [url] = await bucket.file(data).getSignedUrl(options);
 //     return url;
 // });
+
+async function ___cquery(openai_api_key, prompt, temperature) {
+  const requestOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + openai_api_key
+    },
+    body: JSON.stringify({
+      "model": MODEL,
+      "temperature": Number(temperature),
+      "max_tokens": 128,
+      "top_p": 1,
+      "frequency_penalty": 0,
+      "presence_penalty": 0,
+      "prompt": prompt
+    })
+  };
+  const response = await fetch('https://api.openai.com/v1/completions', requestOptions);
+  const data = await response.json();
+  if (data.error) {
+    console.log("ERROR");
+    console.log(data.error);
+  }
+  return data;
+}
+
+async function ___igquery(openai_api_key, prompt) {
+  const requestOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + openai_api_key
+    },
+    body: JSON.stringify({
+      "n": 1,
+      "size": "256x256",
+      "prompt": prompt
+    })
+  };
+  const response = await fetch('https://api.openai.com/v1/images/generations', requestOptions);
+  const data = await response.json();
+  return data;
+}
+
+function getServices(openai, google) {
+  return {
+    predict: async (p, temp) => {
+      var e = await ___cquery(openai, p, temp);
+      return e.choices[0].text;
+    },
+    search: async q => {
+      var result = await customsearch.cse.list({
+        cx: 'b31b5c857da0046b8',
+        q: q,
+        auth: google,
+      });
+      //console.log(result.data.items);
+      return result.data.items;
+    }
+  }
+}
 
 async function getContext(culturePath, ctx = {}) {
   var C = {
@@ -90,24 +137,6 @@ async function addContextSamples(culturePath, ctx = {}) {
   });
   if (ctx.intro_samples.length != 0)
     ctx.intro_text = oneOf(ctx.intro_samples).text;
-}
-
-function getServices(openai, google) {
-  return {
-    predict: async (p, temp) => {
-      var e = await ___cquery(openai, p, temp);
-      return e.choices[0].text;
-    },
-    search: async q => {
-      var result = await customsearch.cse.list({
-        cx: 'b31b5c857da0046b8',
-        q: q,
-        auth: google,
-      });
-      //console.log(result.data.items);
-      return result.data.items;
-    }
-  }
 }
 
 exports.testPriming = functions
@@ -159,25 +188,6 @@ async function createImageForAgent(key, member, xtra) {
   return filePath;
 }
 
-// exports.onCreateMember = functions
-//   .runWith({ secrets: [openAIApiKe, googleSearchKey] })
-//   .firestore.document('/member/{docId}')
-//   .onCreate(async (change, context) => {
-//     const member = change.data();
-//     member.id = context.params.docId;
-//     functions.logger.info(member);
-//     if (member.priming) {
-//       // its an agent
-//       if (!member.image) {
-//         var filePath = await createImageForAgent(openAIApiKey.value(), member);
-//         return change.ref.set({
-//           image: filePath
-//         }, { merge: true });
-//       }
-//     }
-//     return true;
-//   });
-
 // When an introduction is created, fire up all the agents...
 exports.onCreateIntroduction = functions
   .runWith({ secrets: [openAIApiKey, googleSearchKey] })
@@ -188,17 +198,12 @@ exports.onCreateIntroduction = functions
     let agentQuery = db.collection('member')
       .where('culture', '==', intro.culture)
       .orderBy('created', 'asc');
-
     agentQuery.stream().on('data', (doc) => {
       var agent = doc.data();
       agent.id = doc.id;
       if ('member/' + agent.id != intro.member) {
-        // ___queue(function () {
-        //   return addResponse(openAIApiKey.value(), googleSearchKey.value(), agent, intro);
-        // });
         _queue('add-response', { agent: agent, intro: intro });
       }
-    }).on('end', () => {
     });
     return true;
   });
@@ -214,22 +219,15 @@ exports.onCreateResponse = functions
       .get().then((e) => {
         let intro = e.data();
         intro.id = e.id;
-
         let agentQuery = db.collection('member')
           .where('culture', '==', intro.culture)
           .orderBy('created', 'asc');
-
         agentQuery.stream().on('data', (doc) => {
           var agent = doc.data();
           agent.id = doc.id;
           if ('member/' + agent.id != response.member) {
-            // ___queue(function () {
-            //   return addResponseJudgement(openAIApiKey.value(), googleSearchKey.value(), agent, intro, response);
-            // });
             _queue('add-response-judgement', { agent: agent, intro: intro, response: response });
-
           }
-        }).on('end', () => {
         });
         return true;
       });
@@ -265,11 +263,9 @@ function addIntro(services, agent) {
         const res = db
           .collection('introduction')
           .add(data);
-
         res.then(doc => {
           resolve(doc)
         })
-
       });
     });
   });
@@ -366,9 +362,14 @@ exports.scheduledFunction = functions
   .runWith({ secrets: [openAIApiKey, googleSearchKey] })
   .pubsub.schedule('* * * * *').onRun((context) => {
     functions.logger.info('This runs every minute!');
-    _processQ(getServices(openAIApiKey.value(), googleSearchKey.value()));
-    return true;
+    _checkCultureActivityAndPostIfItsSlow();
+    return _processQ(getServices(openAIApiKey.value(), googleSearchKey.value()));
   });
+
+function _checkCultureActivityAndPostIfItsSlow() {
+  // if nothing was posted in the last ___ choose a random agent to post
+  // check responses (deeply) ... if there is opportunity to respond, take it
+}
 
 exports.callAgentsForCulture = functions
   .https.onCall((data, context) => {
@@ -388,52 +389,6 @@ function promptAgents(culturePath) {
     functions.logger.info('   prompt agent ' + agent.name + ' ' + agent.id);
     _queue('add-intro', agent);
   });
-}
-
-
-async function ___cquery(openai_api_key, prompt, temperature) {
-  const requestOptions = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + openai_api_key
-    },
-    body: JSON.stringify({
-      "model": MODEL,
-      "temperature": Number(temperature),
-      "max_tokens": 128,
-      "top_p": 1,
-      "frequency_penalty": 0,
-      "presence_penalty": 0,
-      "prompt": prompt
-    })
-  };
-  const response = await fetch('https://api.openai.com/v1/completions', requestOptions);
-  const data = await response.json();
-  if (data.error) {
-    console.log("ERROR");
-    console.log(data.error);
-  }
-  return data;
-}
-
-
-async function ___igquery(openai_api_key, prompt) {
-  const requestOptions = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + openai_api_key
-    },
-    body: JSON.stringify({
-      "n": 1,
-      "size": "256x256",
-      "prompt": prompt
-    })
-  };
-  const response = await fetch('https://api.openai.com/v1/images/generations', requestOptions);
-  const data = await response.json();
-  return data;
 }
 
 
@@ -460,12 +415,13 @@ async function _processQ(services, batchSize = 8) {
 async function _processQBatch(services, query, resolve) {
   const snapshot = await query.get();
   const batchSize = snapshot.size;
+  functions.logger.info('processing batch size=' + snapshot.size);
   if (batchSize === 0) {
-    resolve();
+    if (resolve)
+      resolve();
     return;
   }
 
-  functions.logger.info('processing batch');
   const batch = db.batch();
   for (let i = 0; i < snapshot.docs.length; i++) {
     let doc = snapshot.docs[i];
@@ -481,7 +437,7 @@ async function _processQBatch(services, query, resolve) {
 }
 
 async function _processRequest(services, r) {
-  functions.logger.info('  process request '+r.fname);
+  functions.logger.info('  process request ' + r.fname);
   switch (r.fname) {
     case 'add-intro':
       return addIntro(services, r.data);

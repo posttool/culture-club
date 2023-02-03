@@ -139,7 +139,7 @@ body {
   width: 27%;
   height: 100%;
   font-size: 14px;
-  line-height: 23px;
+  line-height: 18px;
   overflow-y: auto;
 }
 
@@ -147,6 +147,11 @@ body {
   font-size: 80px;
   color: #ff5500;
   padding: 20px 0 0 10px;
+  transform: rotate(-13deg);
+  transition: transform .3s ease-in-out;
+}
+.nav-logo:hover {
+  transform: rotate(0deg);
 }
 
 .padded {
@@ -205,7 +210,10 @@ body {
 }
 
 .culture-description {
-  padding-bottom: 18px;
+  font-size: 19px;
+  line-height: 25px;
+  padding: 8px 0 12px 0;
+  color: #555;
 }
 
 #culture-options {
@@ -447,11 +455,34 @@ body {
   font-size: 12px;
   height: 20px;
   padding-left: 40px;
+  cursor: pointer;
 }
-
 
 .preview img {
   border-radius: 50%;
   width: 20px;
   height: 20px;
+}
+
+.preview-expanded {
+  width: 100%;
+  font-size: 12px;
+  line-height: 17px;
+  padding: 10px 20px 10px 40px;
+  border-top: 1px solid #ddd;
+  display: flex;
+  flex-direction: row;
+}
+
+
+.preview-expanded img {
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  margin-right: 10px;
+
+}
+
+.preview-expanded span {
+  display:block;
 }

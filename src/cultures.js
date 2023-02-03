@@ -61,7 +61,7 @@ function factoryCultureCell(data) {
   $el.innerHTML = '';
   var $name = $$({ el: 'b', text: data.name + ' ', $parent: $el });
   var $time = $$({ el: 'span', className: 'time', $parent: $el });
-  var $description = $$({ $parent: $el, text: data.description });
+  var $description = $$({ $parent: $el, text: data.description, className: 'culture-description' });
   if (data.created) {
     $time.innerText = timeAgo.format(data.created.toDate());
   }
@@ -466,7 +466,7 @@ function introForm(saveHandler) {
   return $div;
 }
 
-// "SAVE" "UPDATE"
+
 function tempFileOrNull(file) {
   if (file) {
     return '/images/temp.jpg';
@@ -475,15 +475,16 @@ function tempFileOrNull(file) {
   }
 }
 
+// file handling is untested
 async function createCulture(name, description, file) {
   const culture = new Culture(Member.current, name, description,
     tempFileOrNull(file));
   const cDoc = await culture.save();
   if (file) {
-    const filePath = `${getAuth().currentUser.uid}/culture/${cDoc.id}/${file.name}`;
+    const filePath = `${Member.current._id}/culture/${cDoc._id}/${file.name}`;
     await saveFileAndUpdateDoc(file, filePath, cDoc);
   }
-  location.href = 'culture.html?id=' + cDoc.id;
+  location.href = 'culture.html?id=' + cDoc._id;
 }
 
 async function createAgent(culture, name, priming, temperature, temp, file) {
@@ -491,7 +492,7 @@ async function createAgent(culture, name, priming, temperature, temp, file) {
     temperature, tempFileOrNull(file));
   const cDoc = await agent.save();
   if (file) {
-    const filePath = `${getAuth().currentUser.uid}/agent/${cDoc.id}`;
+    const filePath = `${Member.current._id}/agent/${cDoc._id}`;
     await saveFileAndUpdateDoc(file, filePath, cDoc);
   }
   hideModal();
@@ -502,7 +503,7 @@ async function createIntro(culture, text, file) {
     tempFileOrNull(file));
   const cDoc = await intro.save();
   if (file) {
-    const filePath = `${getAuth().currentUser.uid}/intro/${cDoc.id}/${file.name}`;
+    const filePath = `${Member.current._id}/intro/${cDoc._id}/${file.name}`;
     await saveFileAndUpdateDoc(file, filePath, cDoc);
   }
   $("intro-ta").value = '';
@@ -512,9 +513,11 @@ async function saveFileAndUpdateDoc(file, filePath, cDoc) {
   const newImageRef = ref(getStorage(), filePath);
   const fileSnapshot = await uploadBytesResumable(newImageRef, file);
   const publicImageUrl = await getDownloadURL(newImageRef);
-  await updateDoc(cDoc, {
-    image: publicImageUrl
-  });
+  // await updateDoc(cDoc, {
+  //   image: publicImageUrl
+  // });
+  cDoc.image = publicImageUrl;
+  await cDoc.save();
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -744,9 +747,11 @@ function twoColPost($el, data, countResponsePath, style) {
               let nestedResponse = change.doc.data();
               let $nrel = $$({
                 $parent: $responseText, className: 'preview', click: e => {
-                  $nrel.style.height = 'auto';
+                  $nrel.setAttribute('class', 'preview-expanded');
+                  console.log($nrel)
                 }
               });
+              console.log($nrel)
               let $imgel = $$({ $parent: $nrel, el: 'span' });
               $$({ $parent: $nrel, text: nestedResponse.text, el: 'span' });
               getMember(nestedResponse.member, function (member) {
