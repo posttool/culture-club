@@ -35,6 +35,7 @@ exports.localUtility = functions
   .runWith({ secrets: [openAIApiKey, googleSearchKey] })
   .https.onRequest((request, response) => {
     // getAll().then(o => { response.json(o); });
+    // _checkCultureActivityAndPostIfItsSlow();
     _processQ(getServices(openAIApiKey.value(), googleSearchKey.value()));
     response.json({ message: 'ok' });
   });
@@ -105,8 +106,7 @@ function getServices(openai, google) {
         q: q,
         auth: google,
       });
-      //console.log(result.data.items);
-      return result.data.items;
+      return result;
     }
   }
 }
@@ -188,6 +188,32 @@ async function createImageForAgent(key, member, xtra) {
   return filePath;
 }
 
+
+// This could be a person or an agent...
+exports.onCreateMember = functions
+  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
+  .firestore.document('/member/{docId}')
+  .onCreate((change, context) => {
+    var member = change.data();
+    member.id = context.params.docId;
+
+    if (member.culture) {
+      // its an agent
+      //update culture timestamp & counter
+      db.doc(member.culture).get().then(cultureDoc => {
+        cultureDoc.ref.update({
+          updated: Firestore.FieldValue.serverTimestamp(),
+          agentCount: Firestore.FieldValue.increment(1)
+        });
+      });
+    } else {
+      // maybe add email to a private mailing list
+      // and erase
+      // change.ref.update({email:''});
+    }
+    return true;
+  });
+
 // When an introduction is created, fire up all the agents...
 exports.onCreateIntroduction = functions
   .runWith({ secrets: [openAIApiKey, googleSearchKey] })
@@ -195,18 +221,30 @@ exports.onCreateIntroduction = functions
   .onCreate((change, context) => {
     var intro = change.data();
     intro.id = context.params.docId;
-    let agentQuery = db.collection('member')
-      .where('culture', '==', intro.culture)
-      .orderBy('created', 'asc');
-    agentQuery.stream().on('data', (doc) => {
-      var agent = doc.data();
-      agent.id = doc.id;
-      if ('member/' + agent.id != intro.member) {
-        _queue('add-response', { agent: agent, intro: intro });
-      }
+    createResponses(intro);
+    //update culture timestamp & counter
+    db.doc(intro.culture).get().then(cultureDoc => {
+      cultureDoc.ref.update({
+        updated: Firestore.FieldValue.serverTimestamp(),
+        introCount: Firestore.FieldValue.increment(1)
+      });
     });
     return true;
   });
+
+function createResponses(intro) {
+  functions.logger.info('creating responses for ' + intro.id)
+  let agentQuery = db.collection('member')
+    .where('culture', '==', intro.culture)
+    .orderBy('created', 'asc');
+  agentQuery.stream().on('data', (doc) => {
+    var agent = doc.data();
+    agent.id = doc.id;
+    if ('member/' + agent.id != intro.member) {
+      _queue('add-response', { agent: agent, intro: intro });
+    }
+  });
+}
 
 exports.onCreateResponse = functions
   .runWith({ secrets: [openAIApiKey, googleSearchKey] })
@@ -250,6 +288,8 @@ function addIntro(services, agent) {
         // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
+          updated: Firestore.FieldValue.serverTimestamp(),
+          state: 'public',
           member: 'member/' + agent.id,
           culture: agent.culture,
           text: c.lastResult,
@@ -288,6 +328,8 @@ function addResponse(services, agent, intro) {
         // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
+          updated: Firestore.FieldValue.serverTimestamp(),
+          state: 'public',
           member: 'member/' + agent.id,
           text: c.lastResult,
           log: c.log,
@@ -332,6 +374,8 @@ function addResponseJudgement(services, agent, intro, response) {
         // create a response and add it
         const data = {
           created: Firestore.FieldValue.serverTimestamp(),
+          updated: Firestore.FieldValue.serverTimestamp(),
+          state: 'public',
           member: 'member/' + agent.id,
           text: c.lastResult,
           log: c.log,
@@ -361,20 +405,67 @@ function addResponseJudgement(services, agent, intro, response) {
 exports.scheduledFunction = functions
   .runWith({ secrets: [openAIApiKey, googleSearchKey] })
   .pubsub.schedule('* * * * *').onRun((context) => {
-    functions.logger.info('This runs every minute!');
-    _checkCultureActivityAndPostIfItsSlow();
+    functions.logger.info('On the minute * * * * * !');
+    //_checkCultureActivityAndPostIfItsSlow();
     return _processQ(getServices(openAIApiKey.value(), googleSearchKey.value()));
   });
 
 function _checkCultureActivityAndPostIfItsSlow() {
+  console.log("_checkCultureActivityAndPostIfItsSlow");
   // if nothing was posted in the last ___ choose a random agent to post
+  db.collection('culture').get().then(culturesSnapshot => {
+    culturesSnapshot.docs.forEach((cultureDoc) => {
+      var culturePath = 'culture/' + cultureDoc.id;
+      db.collection('introduction')
+        .where('culture', '==', culturePath)
+        .orderBy('created', 'asc')
+        .limit(1).get().then(introSnap => {
+          functions.logger.info('culture ' + culturePath);
+          if (introSnap.docs.length == 0) {
+            functions.logger.info('                       no posts');
+          } else {
+            let intro = introSnap.docs[0].data();
+            let introTime = intro.created.toDate().getTime();
+            let agoTime = new Date().getTime() - introTime;
+            functions.logger.info('                      last post ' + (agoTime / (60 * 1000)));
+            if (agoTime < 2 * 60 * 1000) {
+              functions.logger.info('                      exiting')
+              return;
+            }
+          }
+          // check the queue
+          // where fname: add-intro & agent.culture: culturePath & state: init
+          // if its queued, return
+          // otherwise, pick an agent to represent...
+          let agentQuery = db.collection('member')
+            .where('culture', '==', culturePath)
+            .orderBy('created', 'asc')
+            .get().then(agentSnap => {
+              let agentDoc = oneOf(agentSnap.docs);
+              let agent = agentDoc.data();
+              agent.id = agentDoc.id;
+              functions.logger.info('                      adding intro for agent ' + agentDoc.id)
+              _queue('add-intro', agent);
+            })
+        });
+    });
+  });
   // check responses (deeply) ... if there is opportunity to respond, take it
 }
 
 exports.callAgentsForCulture = functions
   .https.onCall((data, context) => {
-    functions.logger.info('callAgentsForCulture ' + data);
-    promptAgents('culture/' + data);
+    functions.logger.info('callAgentsForCulture ');
+    if (data.cultureId) {
+      functions.logger.info('culture/' + data.cultureId);
+      promptAgents('culture/' + data.cultureId);
+    } else if (data.introductionId) {
+      db.collection('introduction').doc(data.introductionId).get().then(e => {
+        let intro = e.data();
+        intro.id = e.id;
+        createResponses(intro);
+      });
+    }
     return true;
   });
 
@@ -383,11 +474,24 @@ function promptAgents(culturePath) {
     .where('culture', '==', culturePath)
     .orderBy('created', 'asc');
 
+  functions.logger.info("prompt agents "+culturePath)
+
   agentQuery.stream().on('data', (doc) => {
     let agent = doc.data();
     agent.id = doc.id;
-    functions.logger.info('   prompt agent ' + agent.name + ' ' + agent.id);
-    _queue('add-intro', agent);
+    db.collection('service-queue')
+      .where('state', '!=', 'complete')
+      .where('fname', '==', 'add-intro')
+      .where('data.agent.id', '==', agent.id)
+      .count().get().then(s => {
+        var in_queue = s.data().count;
+        functions.logger.info("prompt agent "+agent.name+" "+in_queue)
+        if (in_queue == 0) {
+          _queue('add-intro', agent);
+        }
+      }).catch(e => {
+        functions.logger.error("prompt agents error ", e)
+      });
   });
 }
 

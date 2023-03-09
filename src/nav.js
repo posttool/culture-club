@@ -27,6 +27,9 @@ var $userPic = $el.querySelector('#user-pic');
 var $userName = $el.querySelector('#user-name');
 var $signInButton = $el.querySelector('#sign-in');
 var $signOutButton = $el.querySelector('#sign-out');
+$('root').children[0].append($el);
+hide($signInButton);
+hide($signOutButton);
 
 var _authStateCallback = null;
 
@@ -34,9 +37,7 @@ export function initNavigation(config, authStateCallback) {
   initFirebaseAuth();
   Member.cached = {} //keyed by id
   _authStateCallback = authStateCallback;
-  $('root').children[0].append($el);
-  hide($signInButton);
-  hide($signOutButton);
+
   $signOutButton.addEventListener('click', signOutUser);
   $signInButton.addEventListener('click', signIn);
 }
@@ -46,7 +47,7 @@ function initFirebaseAuth() {
   onAuthStateChanged(getAuth(), authStateObserver);
 }
 
-async function signIn() {
+export async function signIn() {
   var provider = new GoogleAuthProvider();
   await signInWithPopup(getAuth(), provider);
 }

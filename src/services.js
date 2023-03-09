@@ -28,8 +28,8 @@ export class Services {
     return res.data;
   }
 
-  async startAgents(cultureId){
-    var res = await this.startAgents({cultureId: cultureId});
+  async startAgents(options){
+    var res = await this.startAgents(options);
     return res.data;
   }
 

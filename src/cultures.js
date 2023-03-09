@@ -10,22 +10,24 @@ import {
   getFirestore,
   collection,
   query,
+  where,
   orderBy,
   onSnapshot,
-  updateDoc,
+  getCountFromServer,
 } from 'firebase/firestore';
 
 
 // time formating
-import TimeAgo from 'javascript-time-ago'
-import en from 'javascript-time-ago/locale/en'
-TimeAgo.addDefaultLocale(en)
-const timeAgo = new TimeAgo('en-US')
+import TimeAgo from 'javascript-time-ago';
+import en from 'javascript-time-ago/locale/en';
+TimeAgo.addDefaultLocale(en);
+const timeAgo = new TimeAgo('en-US');
 
 // app constructs
 import { getFirebaseConfig } from './firebase-config.js';
-import { Services } from './services.js'
-import { Culture, Introduction, Member, Agent } from './data-objects.js'
+import { Services } from './services.js';
+import { Culture, Introduction, Member, Agent, ServiceQueue } from './data-objects.js';
+import { signIn } from './nav.js';
 
 var services = null;
 export function initDisplay(functions) {
@@ -37,44 +39,33 @@ export async function displayCultures() {
   var $root = $('root').children[1];
   var $div = $$({ $parent: $root });
   var $cultureHeader = $$({ $parent: $div, className: 'padded' });
+  var $cultureListPrivate = $$({ $parent: $div, id: 'culture-list' });
   var $cultureList = $$({ $parent: $div, id: 'culture-list' });
   var $cultureOptions = $$({ $parent: $div, id: 'culture-options' });
 
-  $$({ $parent: $cultureHeader, el: 'h2', text: 'Cultures' });
-  $$({
-    $parent: $cultureOptions, el: 'button', text: 'Create Culture',
-    click: displayCultureForm
-  });
+  $$({ $parent: $cultureHeader, el: 'h1', text: 'Cultures' });
 
   const culture = new Culture();
-  culture.all(divFactory($cultureList, factoryCultureCell));
-}
+  culture.all(divFactory($cultureList, $$cultureCell));
 
-function factoryCultureCell(data) {
-  var $el = $(data.id);
-  if (!$el) {
-    $el = $$({ id: data.id, className: 'culture-home' });
-    $el.onclick = function () {
-      document.location.href = '/culture.html?id=' + data.id;
-    }
-  }
-  $el.innerHTML = '';
-  var $name = $$({ el: 'b', text: data.name + ' ', $parent: $el });
-  var $time = $$({ el: 'span', className: 'time', $parent: $el });
-  var $description = $$({ $parent: $el, text: data.description, className: 'culture-description' });
-  if (data.created) {
-    $time.innerText = timeAgo.format(data.created.toDate());
-  }
-  return $el;
-}
+  if (Member.current) {
+    // private cultures with an intentional limit bug
+    culture._some(
+      where('state', '==', 'private'),
+      where('creator', '==', Member.current.uid),
+      10,
+      divFactory($cultureListPrivate, $$cultureCell));
 
-function displayCultureForm() {
-  var $div = $$({});
-  var $header = $$({ $parent: $div });
-  $$({ $parent: $header, el: 'h2', text: 'New culture' });
-  var $form = cultureForm(createCulture, hideModal);
-  $div.appendChild($form);
-  showModal($div);
+    $$({
+      $parent: $cultureOptions, el: 'button', text: 'Create a culture',
+      click: displayCultureForm
+    });
+  } else {
+    $$({
+      $parent: $cultureOptions, el: 'button', text: 'Sign in to create a culture',
+      click: signIn
+    });
+  }
 }
 
 // CULTURE PAGE
@@ -96,81 +87,124 @@ export async function displayCulture(id) {
   var $intros = $$({ id: 'intros', $parent: $introsPanel });
 
   //  header: name, description, image?
-  $$({ el: 'h2', text: culture.name, $parent: $header });
-  $$({ className: 'culture-description', text: culture.description, $parent: $header });
+  var $title = $$({ el: 'h1', $parent: $header });
+  var $description = $$({ className: 'culture-description', text: culture.description, $parent: $header });
+  var renderTitle = e => {
+    var s = '';
+    if (_is_owner(culture)) {
+      if (culture.state == 'public')
+        s += '<span class="material-symbols-outlined">public</span> ';
+      else
+        s += '<span class="material-symbols-outlined">lock</span> ';
+      s += '<span class="material-symbols-outlined">edit</span> ';
+    }
+    s += culture.name;
+    $title.innerHTML = s;
+    $description.innerHTML = culture.description;
+  };
+  renderTitle();
+  if (_is_owner(culture)) {
+    $title.addEventListener('click', e => {
+      var $form = $$cultureForm((name, description, isPublic) => {
+        culture.name = name;
+        culture.description = description;
+        culture.state = isPublic ? 'public' : 'private';
+        culture.save().then(r => {
+          hideModal();
+          renderTitle();
+        });
+      }, hideModal, culture);
+      showModal($form.root);
+      $form.input.focus();
+    });
+  }
 
   //  list of agents
   var $agentContainer = $$({ className: 'agent-container padded', $parent: $sidebar });
   var $agentContainerHeader = $$({ $parent: $agentContainer, className: 'agent-container-header' });
   var $agentCells = $$({ $parent: $agentContainer, className: 'agent-cells' });
-  var $agentButtons = $$({ $parent: $agentContainer, className: 'agent-buttons' });
+  var $agentButtons = $$({ $parent: $agentContainer, className: 'agent-buttons-container' });
+  const coll = collection(getFirestore(), "member");
+  const q = query(coll, where('culture', '==', culture.path()));
+  const snapshot = await getCountFromServer(q);
+  const agentCount = snapshot.data().count;
+  // console.log('ic=' + agentCount)
 
   if (Member.current) {
+
     $$({ $parent: $agentContainerHeader, el: 'h3', text: 'Agent members' });
     // create agent
+    var $addAgentContainer = $$({$parent: $agentButtons, className: 'tooltip'})
     $$({
-      el: 'i', text: 'add_circle', className: 'material-symbols-outlined add-agent',
-      $parent: $agentButtons, click: function () {
-        // displayAgentForm(culture);
+      $parent: $addAgentContainer, 
+      text: 'add_circle', 
+      className: 'material-symbols-outlined add-agent',
+      click: function () {
         location.href = 'agent.html?culture=' + id;
       }
     });
-    if (window.location.hostname.includes("localhost") || Member.current.email == 'david@posttool.com') {
+    $$({ $parent: $addAgentContainer, 
+      text: 'Click to add an agent.',
+      className: 'tooltiptext'});
+
+    if (_is_owner(culture) && culture.agentCount != 0) {
       // make agents talk
-      $$({
-        el: 'i', text: 'arrow_circle_right', className: 'material-symbols-outlined add-agent',
-        $parent: $agentButtons, click: function () {
-          // displayAgentForm(culture);
-          services.startAgents(id);
+      var $startAgentContainer = $$({$parent: $agentButtons, className: 'tooltip'})
+      var $startAgents = $$({ 
+        $parent: $startAgentContainer, 
+        text: 'arrow_circle_right', 
+        className: 'material-symbols-outlined add-agent',
+        click: function () {
+          hide($startAgents);
+          services.startAgents({ cultureId: id }).then(r => {
+            // console.log(r);
+          })
         }
       });
+      $$({ $parent: $startAgentContainer, 
+        text: 'Click to have agents post introductions. This will take a few minutes depending on conditions.',
+        className: 'tooltiptext'});
     }
-
     //  list agents for culture
     const agent = new Agent();
-    await agent.some('culture', '==', culture.path(),
-      divFactory($agentCells, factoryAgentCell));
-
-    // introduce an idea
-    var $introForm = introForm(function (text, file) {
-      createIntro(culture, text, file);
-    });
-    $addIntro.append($introForm);
+    agent.some('culture', '==', culture.path(), divFactory($agentCells, $$agentCell));
   }
 
   //list Introductions
   const intro = new Introduction();
-  await intro.some('culture', '==', culture.path(), divFactory($intros, factoryIntroCell));
+  intro.some('culture', '==', culture.path(), divFactory($intros, $$introCell));
+
+  if (agentCount == 0) {
+    var $instructions = $$({
+      $parent: $addIntro,
+      className: 'help-info padded'});
+    $instructions.innerHTML = 
+      'This is a new culture.<br><br>If/when it is public, everyone will be able to post thoughts and questions here. '+
+      'But first, you (and others) will need to create situated LLMs that can field those posts.<br><br> '+
+      'Click the <span class="material-symbols-outlined">add_circle</span> button in the far right column to create an agent.<br><br> '+
+      'It only needs a name &mdash; a template will be pre-filled. '+
+      'The more you engineer your agent prompts, the more opinionated your agent will be. '+
+      'Add more than one to make it interesting!';
+      $instructions.style['padding-right'] = '80px';
+  }
+
+  if (agentCount != 0) {
+    // introduce an idea
+    var $introForm = introForm(async (text, file) => {
+      const intro = new Introduction(culture, Member.current, text, tempFileOrNull(file));
+      intro.state = 'public';
+      const cDoc = await intro.save();
+      // if (file) {
+      //   const filePath = `${Member.current._id}/intro/${cDoc._id}/${file.name}`;
+      //   await saveFileAndUpdateDoc(file, filePath, cDoc);
+      // }
+    });
+    $addIntro.append($introForm);
+  }
+
 }
 
-function factoryAgentCell(agent) {
-  var $el = $(agent.id);
-  if (!$el) {
-    $el = $$({ id: agent.id, className: 'agent ' + agent.type });
-    $el.onclick = function () {
-      document.location.href = '/agent.html?id=' + agent.id;
-    }
-  }
-  $el.innerHTML = '';
-  if (agent.image) {
-    var $img = $$({ el: 'img', $parent: $el });
-    $img.setAttribute('src', getStorageUrl(agent.image));
-  }
-  return $el;
-}
 
-function factoryIntroCell(intro) {
-  var $el = $(intro.id);
-  if (!$el) {
-    $el = $$({ id: intro.id, className: 'intro-main twoColumn' });
-    $el.onclick = function () {
-      document.location.href = '/introduction.html?id=' + intro.id;
-    }
-  }
-  $el.innerHTML = '';
-  twoColPost($el, intro, 'introduction/' + intro.id + '/response', 0);
-  return $el;
-}
 
 
 // AGENT page
@@ -189,17 +223,19 @@ export async function displayAgent(agentId, cultureId) {
   }
   if (!agent.priming) {
     agent.priming = [
-      'I am an agent who knows about all kinds of stuff.',
+      'I am an agent who knows all about ' + culture.name + '.',
       '${agent_intro}\n\rThis is a two sentence post I wrote: ',
       '${agent_intro}\n\rI read a post `${intro_text}` and wrote a response: ',
       '${agent_intro}\n\rI read a post `${intro_text}` and a response `${response_text}`. When I read the response to the post I felt: ']
   }
 
-  let saveHandler = async function (name, priming, temp) {
+  let saveAgentHandler = async function (name, priming, temp) {
     return new Promise((resolve, reject) => {
+      agent.state = 'public';
       agent.name = name;
       agent.priming = priming;
       agent.temperature = temp;
+      agent.member = Member.current;
       agent.save().then(r => {
         window.history.pushState({}, 'Agent: ' + agent.name, 'agent.html?id=' + agent._id);
         resolve(r);
@@ -213,7 +249,7 @@ export async function displayAgent(agentId, cultureId) {
   document.title = 'Agent: ' + agent.name;
 
   // form and console
-  var $af = agentForm(saveHandler, cancelHandler, agent, culture.path());
+  var $af = $$agentForm(saveAgentHandler, cancelHandler, agent, culture.path());
   $af.header.appendChild(backToCulture(culture));
 
   $('root').children[1].appendChild($af.root);
@@ -231,7 +267,8 @@ export async function displayIntroduction(id) {
 
   // dom containers
   var $root = $('root').children[1];
-  var $header = $$({ $parent: $root })
+  var $sidebar = $('root').children[2];
+  var $header = $$({ $parent: $root, className: 'padded' })
   var $intro = $$({ $parent: $root, className: 'twoColumn intro-home' })
   var $list = $$({ $parent: $root })
 
@@ -243,15 +280,102 @@ export async function displayIntroduction(id) {
   onSnapshot(q,
     function (snapshot) {
       snapshot.docChanges().forEach(divFactory($list, function (data) {
-        return factoryResponseCell(data, 'introduction/' + id + '/response/');
+        return $$responseCell(data, 'introduction/' + id + '/response/');
       }));
     }, function (e) {
       console.error(e);
     });
 
+  if (_is_owner(culture) || _is_owner(intro)) {
+    // make agents talk
+    var $startAgentContainer = $$({$parent: $sidebar, className: 'tooltip  intro-start-agents-container'})
+    var $startAgents = $$({
+      $parent: $startAgentContainer, 
+      text: 'arrow_circle_right',
+      className: 'material-symbols-outlined  intro-start-agents',
+      click: function () {
+        hide($startAgents);
+        $startAgentContainer.innerHTML = "Agent responses should start showing up within a minute under light traffic."
+        services.startAgents({ introductionId: id }).then(r => {
+          // console.log(r);
+        })
+      }
+    });
+    $$({ $parent: $startAgentContainer, 
+      text: 'Click to get the agents to respond to this prompt.',
+      className: 'tooltiptext'});
+  }
+
 }
 
-function factoryResponseCell(data, basepath) {
+
+
+
+
+
+// div generators ($$) for live firebase snapshots
+
+function $$agentCell(agent) {
+  var $el = $(agent.id);
+  if (!$el) {
+    $el = $$({ id: agent.id, className: 'agent' });
+    $el.onclick = function () {
+      document.location.href = '/agent.html?id=' + agent.id;
+    }
+  }
+  $el.innerHTML = '';
+  if (agent.image) {
+    var $img = $$({ el: 'img', $parent: $el });
+    $img.setAttribute('src', getStorageUrl(agent.image));
+  }
+  var $name = $$({ el: 'h3', $parent: $el, text: agent.name });
+  return $el;
+}
+
+function $$introCell(intro) {
+  var $el = $(intro.id);
+  if (!$el) {
+    $el = $$({ id: intro.id, className: 'intro-main twoColumn' });
+    $el.onclick = function () {
+      document.location.href = '/introduction.html?id=' + intro.id;
+    }
+  }
+  $el.innerHTML = '';
+  twoColPost($el, intro, 'introduction/' + intro.id + '/response', 0);
+  return $el;
+}
+
+function $$cultureCell(data) {
+  var $el = $(data.id);
+  if (!$el) {
+    $el = $$({
+      id: data.id,
+      className: 'culture-home' + (data.state == 'public' ? '' : ' private'),
+      click: (e) => {
+        document.location.href = '/culture.html?id=' + data.id;
+      }
+    });
+  }
+  $el.innerHTML = '';
+  var $name = $$({ $parent: $el, el: 'h2', text: data.name + ' ' });
+  var $descr = $$({ $parent: $el, el: 'p', text: data.description });
+  var $details = $$({ $parent: $el });
+  if (data.agentCount)
+    $$({
+      $parent: $details, el: 'span', className: 'time' + Math.min(data.agentCount, 4),
+      text: data.agentCount + ' ' + plural('Agent', 'Agents', data.agentCount)
+    });
+  if (data.introCount)
+    $$({
+      $parent: $details, el: 'span', className: 'time' + Math.min(data.introCount, 4),
+      text: data.introCount + ' ' + plural('Introduction', 'Introductions', data.introCount)
+    });
+  timestamper(data.created, $$({ $parent: $details, el: 'span', className: 'time1' }), 'Created ');
+  timestamper(data.updated, $$({ $parent: $details, el: 'span', className: 'time0' }), 'Updated ');
+  return $el;
+}
+
+function $$responseCell(data, basepath) {
   var $el = $(data.id);
   if (!$el) {
     $el = $$({ id: data.id, className: 'response-cell twoColumn' });
@@ -261,84 +385,137 @@ function factoryResponseCell(data, basepath) {
   return $el;
 }
 
+
 // FORMS
 
-function cultureForm(saveHandler, cancelHandler, props = {}) {
+
+function displayCultureForm() {
   var $div = $$({});
-  var $form = $$({ id: 'culture-form', el: 'form', $parent: $div });
-  var $input = $$({ el: 'input', type: 'text' });
+  var $header = $$({ $parent: $div });
+  $$({ $parent: $header, el: 'h2', text: 'New culture' });
+  var $form = $$cultureForm(async (name, description, isPublic) => {
+    const culture = new Culture(Member.current, name, description, null);
+    culture.state = isPublic ? 'public' : 'private';
+    const cDoc = await culture.save();
+    location.href = 'culture.html?id=' + cDoc._id;
+  }, hideModal);
+  $div.appendChild($form.root);
+  showModal($div);
+  $form.input.focus();
+}
+
+function $$cultureForm(saveHandler, cancelHandler, props = { name: '', description: '', state: 'private' }) {
+  var $div = $$({});
+  var $form = $$({ $parent: $div, id: 'culture-form', el: 'form' });
+  var $input = $$({ el: 'input', type: 'text', value: props.name });
+  $input.placeholder = 'e.g. Ethics or Jokes'
+  $input.maxLength = 80;
   var $ta = $$({ el: 'textarea' });
+  $ta.placeholder = 'A culture is a collection of differently grounded agents.\n\rDescribe it briefly e.g. '+
+     '"Focused on investigating hypothetical ethical situations with a variety of agents." or "Try out your jokes on an audience of agents."';
+  $ta.style.height = "150px";
+  $ta.maxLength = 300;
+  $ta.innerText = props.description;
+  var $pubDiv = $$({ el: 'label', className: 'switch' });
+  var $pub = $$({ $parent: $pubDiv, el: 'input', type: 'checkbox' });
+  $pub.checked = props.state == 'public';
+  $$({ $parent: $pubDiv, el: 'span', className: 'slider round' });
   // var $image = $$({el: 'input', type: 'file'})
   $form.append(labeled('Name', $input));
   $form.append(labeled('Description', $ta));
+  $form.append(labeled('Public', $pubDiv));
   // $form.append(labeled('Image', $image));
+  $form.addEventListener('submit', e => {
+    e.preventDefault();
+    return false;
+  });
 
   $$({
-    el: 'button', text: 'OK', $parent: $div, click: function () {
+    el: 'button', text: 'Submit', $parent: $div, click: function () {
       if (!$input.value) {
-        alert('Needs name');
+        alert('A name is required');
         return;
       }
-      saveHandler($input.value, $ta.value); //, $image.files[0]
+      if (!$ta.value || $ta.value.split(' ') < 3) {
+        alert('A description of at least three words is required... You can edit it later.');
+        return;
+      }
+      saveHandler($input.value, $ta.value, $pub.checked); //, $image.files[0]
     }
   });
 
   $$({
     el: 'button', text: 'Cancel', $parent: $div, click: function () {
+      console.log($pub.checked)
       cancelHandler();
     }
   });
 
-  return $div;
+  return { root: $div, input: $input };
 }
 
-function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
+function $$agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   var $div = $$({ className: 'agent' });
-  var $header = $$({ $parent: $div, id: 'agent-header' });
+  var $header = $$({ $parent: $div, id: 'agent-header', className: 'padded' });
   var $form = $$({ $parent: $div, id: 'agent-form', el: 'div' });
   var $formButtons = $$({ $parent: $div, className: 'agent-buttons' });
   var $debug = $$({ $parent: $('root').children[2] });
   $debug.log = function (style, text) {
-    $$({ $parent: $debug, className: style, text: text });
+    var $logline = $$({ $parent: $debug, className: style });
+    $logline.innerHTML = text;
     $debug.parentNode.scrollTo(0, $debug.parentNode.scrollHeight);
   }
 
   // name input & image
   var $nameRow = $$({ $parent: $form, className: 'name-and-image' });
+  var $image = fileInput(props.image);
+  $image.div.className = 'padded';
+  $nameRow.appendChild($image.div);
   var $input = $$({ $parent: $nameRow, el: 'input', type: 'text', className: 'agent-name-input', value: props.name });
   $input.setAttribute('placeholder', 'Agent name');
-  var $image = fileInput(props.image);
-  $nameRow.appendChild($image.div);
+  $input.maxLength = 58;
+
 
   //image regen
-  var $regen = $$({ $parent: $nameRow, el: 'button', text: 'refresh', className: 'material-icons lite-bg' });
   var $regenExtra = $$({ $parent: $nameRow, el: 'input', className: 'image-extras' });
   $regenExtra.setAttribute('placeholder', 'extra image attributes');
-  $regen.addEventListener('click', (e) => {
-    $debug.log('prompt', 'Generating proto image for "' + $input.value + ' ' + $regenExtra.value + '"');
-    if (props.id) {
+  if (props.id) {
+    var $regen = $$({ $parent: $nameRow, el: 'button', text: 'refresh', className: 'material-icons lite-bg' });
+    $regen.addEventListener('click', (e) => {
+      $debug.log('prompt', 'Generating image for "' + $input.value + ' ' + $regenExtra.value + '"');
+      // if (props.id) {
       services.updateAgentImage(props.id, $regenExtra.value).then((res) => {
         $debug.log('response', 'Complete.');
         $image.img.src = getStorageUrl(res.url);
       });
-    } else {
-      services.getAgentImage($input.value, $regenExtra.value).then((res) => {
-        $debug.log('response', 'Complete - final results will vary.');
-        $image.img.src = res.url;
-      });
-    }
-  });
-
+      // } else {
+      //   services.getAgentImage($input.value, $regenExtra.value).then((res) => {
+      //     $debug.log('response', 'Complete - final results will vary.');
+      //     $image.img.src = res.url;
+      //   });
+      // }
+    });
+  }
 
   // textarea for priming
   // multiple priming ->
   if (typeof props.priming == 'string')
     props.priming = [props.priming, '', '', '']
-  var $taRow = $$({ $parent: $form, className: 'agent-buttons' });
+  var $taRow = $$({ $parent: $form });
   var $ta = tabbedTextareaGroup(['Introduction', 'Post', 'Respond', 'Judge'], props.priming);
   $taRow.appendChild($ta.$el);
+
+  // temperature slider
+  var $temp = $$({ el: 'input', type: 'range' });
+  $temp.setAttribute('min', 0)
+  $temp.setAttribute('max', 1)
+  $temp.setAttribute('step', .05);
+  $temp.setAttribute('value', props.temperature);
+  $form.appendChild(labeled('Temperature', $temp));
+
+  // gen text 
   $$({
-    $parent: $taRow, el: 'button', text: 'start', className: 'material-icons lite-bg',
+    $parent: $form, el: 'button', text: 'start', className: 'material-icons lite-bg',
     click: async function () {
       let prompt = $ta.textareas.value[$ta.tabs.value];
       let agent_intro = $ta.textareas.value[0];
@@ -357,13 +534,6 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   });
 
 
-  // temperature slider
-  var $temp = $$({ el: 'input', type: 'range' });
-  $temp.setAttribute('min', 0)
-  $temp.setAttribute('max', 1)
-  $temp.setAttribute('step', .05);
-  $temp.setAttribute('value', props.temperature);
-  $form.appendChild(labeled('Temp', $temp));
 
   function validate() {
     if (!$input.value) {
@@ -386,14 +556,14 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
         saveHandler($input.value, $ta.textareas.value, $temp.value).then(e => {
           $submit.removeAttribute('disabled');
           $submit.innerText = 'Update';
-          $debug.log('response', 'Save complete.');
+          $debug.log('prompt', 'Save complete.');
           props = e;
           if (genImage) {
             $submit.setAttribute('disabled', 'disabled');
             $debug.log('response', 'Generating image.');
             services.updateAgentImage(e._id, $regenExtra.value).then((res) => {
               $submit.removeAttribute('disabled');
-              $debug.log('response', 'Complete.');
+              $debug.log('response', 'Complete. Click <- to view your agent in context.');
               $image.img.src = getStorageUrl(res.url);
               genImage = false;
             }).catch(e => {
@@ -410,6 +580,18 @@ function agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
   //   cancelHandler();
   // }});
 
+  if (!props.id) {
+    $debug.log('intro', 'Create an agent by filling out their name. ');
+    $debug.log('intro', 'An image will be generated from the name with "extras image attributes" used ' +
+      'to add style cues.');
+  }
+  $debug.log('intro', 'The four tabs [Introduction, Post, Respond, Judge] can be customized to ' +
+    'give your agent a unique perspective. Here are many <a target="_blank" href="https://github.com/dair-ai/Prompt-Engineering-Guide">links</a> ' +
+    'about prompt engineering. Also look at other cultures for inspiration.');
+  $debug.log('intro', 'You can test your agent by clicking the <span class="material-icons">start</span> arrow  near the temperature gauge.');
+  $debug.log('intro', 'After the agent is submitted, it will comment and judge introductions which might ' +
+    'take a few minutes or hours depending on whats going on.');
+
   return { root: $div, header: $header, debug: $debug, form: $form, name: $input, priming: $ta }
 
 }
@@ -420,6 +602,7 @@ function introForm(saveHandler) {
   var $form = $$({ id: 'intro-form', el: 'form' });
   var $ta = $$({ el: 'textarea', id: 'intro-ta' });
   $ta.setAttribute('placeholder', 'Introduce an idea');
+  $ta.maxLength = 700;
   $form.append($ta);
   // TODO add alt here and other place
   $twoCol.userPic.innerHTML = '<img src="' + Member.current.image + '" referrerpolicy="no-referrer"/>';
@@ -438,25 +621,27 @@ function introForm(saveHandler) {
       recognition.start();
     }
   });
-  $$({
-    el: 'button', text: 'post_add', className: 'material-icons lite-bg',
-    $parent: $formButtons, click: function () {
-      alert('add context')
-    }
-  });
+  // $$({
+  //   el: 'button', text: 'post_add', className: 'material-icons lite-bg',
+  //   $parent: $formButtons, click: function () {
+  //     alert('add context')
+  //   }
+  // });
   // TODO handle images/uploads
-  $$({
-    el: 'button', text: 'add_photo_alternate', className: 'material-icons lite-bg',
-    $parent: $formButtons, click: function () {
-      alert('add image')
-    }
-  });
+  // $$({
+  //   el: 'button', text: 'add_photo_alternate', className: 'material-icons lite-bg',
+  //   $parent: $formButtons, click: function () {
+  //     alert('add image')
+  //   }
+  // });
   $$({ className: 'padding', $parent: $formButtons });
   $$({
     el: 'button', text: 'Submit', className: 'post-intro-button',
     $parent: $formButtons, click: function () {
-      if ($ta.value.trim()) {
-        saveHandler($ta.value, null/*upload.input.files[0]*/); //TODO
+      var textVal = $ta.value.trim();
+      if (textVal) {
+        $ta.value = '';
+        saveHandler(textVal, null/*upload.input.files[0]*/); //TODO
       } else {
         alert('Type something first.')
       }
@@ -475,53 +660,56 @@ function tempFileOrNull(file) {
   }
 }
 
-// file handling is untested
-async function createCulture(name, description, file) {
-  const culture = new Culture(Member.current, name, description,
-    tempFileOrNull(file));
-  const cDoc = await culture.save();
-  if (file) {
-    const filePath = `${Member.current._id}/culture/${cDoc._id}/${file.name}`;
-    await saveFileAndUpdateDoc(file, filePath, cDoc);
-  }
-  location.href = 'culture.html?id=' + cDoc._id;
-}
-
-async function createAgent(culture, name, priming, temperature, temp, file) {
-  const agent = new Agent(culture, Member.current, name, priming, type,
-    temperature, tempFileOrNull(file));
-  const cDoc = await agent.save();
-  if (file) {
-    const filePath = `${Member.current._id}/agent/${cDoc._id}`;
-    await saveFileAndUpdateDoc(file, filePath, cDoc);
-  }
-  hideModal();
-}
-
-async function createIntro(culture, text, file) {
-  const intro = new Introduction(culture, Member.current, text,
-    tempFileOrNull(file));
-  const cDoc = await intro.save();
-  if (file) {
-    const filePath = `${Member.current._id}/intro/${cDoc._id}/${file.name}`;
-    await saveFileAndUpdateDoc(file, filePath, cDoc);
-  }
-  $("intro-ta").value = '';
-}
-
-async function saveFileAndUpdateDoc(file, filePath, cDoc) {
-  const newImageRef = ref(getStorage(), filePath);
-  const fileSnapshot = await uploadBytesResumable(newImageRef, file);
-  const publicImageUrl = await getDownloadURL(newImageRef);
-  // await updateDoc(cDoc, {
-  //   image: publicImageUrl
-  // });
-  cDoc.image = publicImageUrl;
-  await cDoc.save();
-}
 
 /////////////////////////////////////////////////////////////////////////
 // utils
+
+
+
+function _is_owner(doc) {
+  if (Member.current) {
+    return Member.current.uid == doc.creator || 'member/' + Member.current._id == doc.member;
+  } else {
+    return false;
+  }
+}
+
+export async function displayWork() {
+  var $root = $('root').children[1];
+  var $div = $$({ $parent: $root });
+  var $cultureHeader = $$({ $parent: $div, className: 'padded' });
+  var $cultureList1 = $$({ $parent: $div, className: 'service-queue-list' });
+  var $cultureList2 = $$({ $parent: $div, className: 'service-queue-list' });
+  var $cultureList3 = $$({ $parent: $div, className: 'service-queue-list' });
+  var $cultureOptions = $$({ $parent: $div, id: 'culture-options' });
+
+  $$({ $parent: $cultureHeader, el: 'h2', text: 'Cultures' });
+  // $$({
+  //   $parent: $cultureOptions, el: 'button', text: 'Retry the stuff that got stuck processing...',
+  //   click: e => { services.retryProcessing() }
+  // });
+
+  const sq = new ServiceQueue();
+  sq.someLimit('state', '==', 'init', 5, divFactory($cultureList1, $$workCell));
+  sq.someLimit('state', '==', 'processing', 5, divFactory($cultureList2, $$workCell));
+  sq.someLimit('state', '==', 'complete', 5, divFactory($cultureList3, $$workCell));
+}
+
+function $$workCell(data) {
+  var $el = $(data.id);
+  if (!$el) {
+    $el = $$({ id: data.id });
+  }
+  let ss = JSON.stringify(data.data).substring(0, 32);
+  $el.innerHTML = '';
+  var $name = $$({ el: 'span', text: data.state + ' ' + data.fname, $parent: $el });
+  var $time = $$({ el: 'span', className: 'time', $parent: $el });
+  if (data.created) {
+    $time.innerText = timeAgo.format(data.created.toDate()) + ' ' + ss;
+  }
+  return $el;
+}
+
 
 // move to data objects
 function getMember(path, f) {
@@ -557,7 +745,7 @@ function deleteEl(id) {
     div.parentNode.removeChild(div);
 }
 
-function divFactory($list, displayEl) {
+function divFactory($list, $$displayElFunction) {
   var completeOrderedList = []; //{id: , timestamp: }; see next function
   return function (change) {
     if (change.type === 'removed') {
@@ -567,7 +755,7 @@ function divFactory($list, displayEl) {
       doc.id = change.doc.id;
       let newElement = !$(doc.id);
       let position = insertInList(completeOrderedList, doc, 'created');
-      var $el = displayEl(doc);
+      var $el = $$displayElFunction(doc);
       if (newElement)
         $list.insertBefore($el, $list.children[position]);
     }
@@ -617,58 +805,13 @@ function hideModal() {
 
 function backToCulture(culture) {
   var $h2 = $$({
-    el: 'h2', className: 'nav padded', click: function () {
+    el: 'h1', className: 'nav ', click: function () {
       location.href = "culture.html?id=" + culture._id;
     }
   });
   $$({ el: 'span', className: 'material-symbols-outlined', text: 'arrow_back', $parent: $h2 });
   $$({ el: 'span', text: ' ' + culture.name, $parent: $h2 });
   return $h2;
-}
-
-function radioGroup(name, values, checkedValue) {
-  var $div = $$({});
-  for (var i = 0; i < values.length; i++) {
-    let checked = false;
-    if (checkedValue && values[i] == checkedValue) {
-      checked = true;
-    } else if (i == 0) {
-      checked = true;
-    }
-    $div.appendChild(radio(name, values[i], checked))
-  }
-  $div.value = function () {
-    for (var i = 0; i < $div.children.length; i++) {
-      let val = $div.children[i].value();
-      if (val) {
-        return val;
-      }
-    }
-    return null;
-  }
-  return $div;
-}
-
-function radio(name, value, checked) {
-  var $div = $$();
-  var $label = $$({ el: 'label', text: value });
-  $label.setAttribute('for', name);
-  var $input = $$({ el: 'input', type: 'radio' });
-  $input.setAttribute('name', name);
-  $input.setAttribute('value', value);
-  if (checked)
-    $input.setAttribute('checked', 'checked');
-  $div.append($input);
-  $div.append($label);
-  $div.value = function () {
-    if ($input.checked) {
-      return $input.value;
-    }
-    else {
-      return null
-    }
-  }
-  return $div
 }
 
 function labeled(label, $input) {
@@ -690,7 +833,7 @@ function twoCol($el) {
 
 function fileInput(imageUrl) {
   if (!imageUrl)
-    imageUrl = 'https://www.ipcc.ch/site/assets/uploads/sites/3/2019/10/img-placeholder.png';
+    imageUrl = 'https://placehold.jp/150x150.png';
   var $d = $$();
   // var id = divId('fi');
   // var $l = $$({el: 'label', className: 'file-upload', $parent: $d});
@@ -703,11 +846,38 @@ function fileInput(imageUrl) {
     //   $img.setAttribute('src', fullUrl);
     // })
     $img.setAttribute('src', getStorageUrl(imageUrl));
-    $img.setAttribute('height', '256');
   }
   return { div: $d, input: null, img: $img, value: function () { return null; } }; //$upload
 }
 
+// async function saveFileAndUpdateDoc(file, filePath, cDoc) {
+//   const newImageRef = ref(getStorage(), filePath);
+//   const fileSnapshot = await uploadBytesResumable(newImageRef, file);
+//   const publicImageUrl = await getDownloadURL(newImageRef);
+//   await updateDoc(cDoc, {
+//     image: publicImageUrl
+//   }); AND/OR
+//   cDoc.image = publicImageUrl;
+//   await cDoc.save();
+// }
+function timestamper(date, $time, prefix = '', ms = 60000) {
+  var _timestamper = function () {
+    if (date) {
+      $time.innerText = prefix + timeAgo.format(date.toDate());
+    } else {
+      $time.innerText = '?';
+    }
+  }
+  setInterval(_timestamper, ms);
+  _timestamper();
+}
+
+function plural(singular, plur, number) {
+  if (number == 1)
+    return singular;
+  else
+    return plur;
+}
 
 function twoColPost($el, data, countResponsePath, style) {
   var $twoCol = twoCol($el);
@@ -726,13 +896,8 @@ function twoColPost($el, data, countResponsePath, style) {
     $author.innerHTML = member.name;
   });
 
-  var timestamper = function () {
-    if (data.created) {
-      $time.innerText = timeAgo.format(data.created.toDate());
-    }
-  }
-  setInterval(timestamper, 1000 * 60);
-  timestamper();
+  timestamper(data.created, $time);
+
 
   // tracking responses // TODO watch // is it too heavy?
   if (countResponsePath) {
@@ -748,10 +913,8 @@ function twoColPost($el, data, countResponsePath, style) {
               let $nrel = $$({
                 $parent: $responseText, className: 'preview', click: e => {
                   $nrel.setAttribute('class', 'preview-expanded');
-                  console.log($nrel)
                 }
               });
-              console.log($nrel)
               let $imgel = $$({ $parent: $nrel, el: 'span' });
               $$({ $parent: $nrel, text: nestedResponse.text, el: 'span' });
               getMember(nestedResponse.member, function (member) {
@@ -835,7 +998,6 @@ function textareaGroup(names) {
     $ta.setAttribute('placeholder', 'Priming...');
     $ta.addEventListener('change', (e) => {
       c._data[index] = $ta.value;
-      console.log($ta.value)
     });
     $tas.push($ta);
   });

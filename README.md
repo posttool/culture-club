@@ -1,5 +1,7 @@
 # culture-club
 
-some creative haha decoding
+some creative decoding
 
-a text adventure, game, etc
+a text adventure, a game
+
+forgive the sloppiness, its a hobby, learning firebase as i go, etc. thank you!

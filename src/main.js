@@ -7,7 +7,7 @@ import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { getFirebaseConfig } from './firebase-config.js';
 
 import { initNavigation } from './nav.js';
-import { initDisplay, displayCultures, displayCulture, displayAgent, displayIntroduction } from './cultures.js';
+import { initDisplay, displayCultures, displayCulture, displayAgent, displayIntroduction, displayWork } from './cultures.js';
 
 const firebaseConfig = getFirebaseConfig();
 const app = initializeApp(firebaseConfig);
@@ -15,7 +15,7 @@ const functions = getFunctions(app);
 initDisplay(functions);
 
 if (window.location.hostname.includes("localhost")) {
-  console.log("USING EMULATOR")
+  console.log("USING EMULATOR!")
   connectFirestoreEmulator(getFirestore(), 'localhost', 8080);
   connectFunctionsEmulator(functions, "localhost", 5001);
 }
@@ -25,11 +25,6 @@ const urlParams = new URLSearchParams(window.location.search);
 
 initNavigation(firebaseConfig, function (member) {
   $('root').children[1].innerHTML = '';
-  if (!member) {
-    let $div = $('root').children[1];
-    $div.innerHTML = '<h2 class="padded"><br>Log in at the bottom left corner.</h2>';
-    return;
-  }
   switch (document.location.pathname) {
     case '/':
       displayCultures();
@@ -42,6 +37,9 @@ initNavigation(firebaseConfig, function (member) {
       break;
     case '/introduction.html':
       displayIntroduction(urlParams.get('id'));
+      break;
+    case '/work.html':
+      displayWork();
       break;
     default:
       console.log('unhandled route ' + document.location.pathname);

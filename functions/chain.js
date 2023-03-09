@@ -52,18 +52,21 @@ class Chain {
     this.context = context;
     this.services = services;
     this.chain = rawtext.split(/\d+\./g);
-    if (this.chain[0].startsWith('// chain'))
-      this.chain.shift();
+    this.chain.shift();
     this.step = 0;
     this.results = [];
     this.log = [];
   }
   async execute() {
-    await this._exec();
-    return true;
+    try {
+      await this._execute();
+    } catch (e) {
+      console.log("CHAIN ERROR at step "+this.step)
+      console.log(e);
+    }
   }
-  async _exec() {
-    if (this.step == this.chain.length) {
+  async _execute() {
+      if (this.step == this.chain.length) {
       return;
     }
     this.log.push('--------------------------');
@@ -94,9 +97,11 @@ class Chain {
         var arg = TemplateEngine(func.substring(7), this.context);
         this.log.push(this.step + " search -> " + arg.substring(0, 512))
         let searchResults = await this.services.search(arg);
-        result = searchResults.map(r => {
-          return r.snippet;
+        result = searchResults.data.items.map(r => {
+          return r.title + ' ' + r.snippet + ' (' + r.link + ')';
         }).join('\r\n');
+        // let r = oneOf(searchResults.data.items);
+        // result = r.title + ' ' + r.snippet + ' (' +r.link+')'
       }
     }
     this.lastResult = result;
@@ -104,7 +109,7 @@ class Chain {
     this.results.push(result);
     this.context['result_' + (this.step + 1)] = result;
     this.step++;
-    await this._exec();
+    await this._execute();
   }
 }
 
