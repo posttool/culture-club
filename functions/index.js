@@ -1,13 +1,19 @@
 const { google } = require('googleapis');
 const customsearch = google.customsearch('v1');
+const {GoogleGenAI, Modality} = require('@google/genai');
+const GEMINI_TEXT_GEN_MODEL = 'gemini-2.0-flash-001';
+const GEMINI_IMAGE_GEN_MODEL = 'gemini-2.0-flash-preview-image-generation';
 
 const { Firestore } = require('@google-cloud/firestore');
-const functions = require("firebase-functions");
+const functions = require("firebase-functions/v1");
 const { defineSecret } = require('firebase-functions/params');
-const openAIApiKey = defineSecret('OPENAI_API_KEY');
+// const openAIApiKey = defineSecret('OPENAI_API_KEY');
 const googleSearchKey = defineSecret('GOOGLE_SEARCH_KEY');
+const googleVertexKey = defineSecret('GOOGLE_VERTEX_AI_KEY');
 
-
+if (process.env.FUNCTIONS_EMULATOR === 'true') {
+  process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'; 
+}
 // The Firebase Admin SDK to access Firestore.
 const admin = require('firebase-admin');
 admin.initializeApp();
@@ -17,7 +23,7 @@ const bucket = admin.storage().bucket();
 
 const chain = require('./chain');
 
-const MODEL = "text-davinci-003";
+// const MODEL = "text-davinci-003";
 // const MODEL = "text-curie-001";
 // const MAX_AGENTS_PER_INTRO = 100;
 const STYLE = [
@@ -32,11 +38,11 @@ function oneOf(a) {
 }
 
 exports.localUtility = functions
-  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
+  .runWith({ secrets: [googleVertexKey, googleSearchKey] })
   .https.onRequest((request, response) => {
     // getAll().then(o => { response.json(o); });
     // _checkCultureActivityAndPostIfItsSlow();
-    _processQ(getServices(openAIApiKey.value(), googleSearchKey.value()));
+    _processQ(getServices(googleVertexKey.value(), googleSearchKey.value()));
     response.json({ message: 'ok' });
   });
 
@@ -50,55 +56,90 @@ exports.localUtility = functions
 //     return url;
 // });
 
-async function ___cquery(openai_api_key, prompt, temperature) {
-  const requestOptions = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + openai_api_key
-    },
-    body: JSON.stringify({
-      "model": MODEL,
-      "temperature": Number(temperature),
-      "max_tokens": 128,
-      "top_p": 1,
-      "frequency_penalty": 0,
-      "presence_penalty": 0,
-      "prompt": prompt
-    })
-  };
-  const response = await fetch('https://api.openai.com/v1/completions', requestOptions);
-  const data = await response.json();
-  if (data.error) {
-    console.log("ERROR");
-    console.log(data.error);
-  }
-  return data;
+// async function ___cquery(openai_api_key, prompt, temperature) {
+//   const requestOptions = {
+//     method: 'POST',
+//     headers: {
+//       'Content-Type': 'application/json',
+//       'Authorization': 'Bearer ' + openai_api_key
+//     },
+//     body: JSON.stringify({
+//       "model": MODEL,
+//       "temperature": Number(temperature),
+//       "max_tokens": 128,
+//       "top_p": 1,
+//       "frequency_penalty": 0,
+//       "presence_penalty": 0,
+//       "prompt": prompt
+//     })
+//   };
+//   const response = await fetch('https://api.openai.com/v1/completions', requestOptions);
+//   const data = await response.json();
+//   if (data.error) {
+//     console.log("ERROR");
+//     console.log(data.error);
+//   }
+//   return data;
+// }
+
+
+async function ___cquery(key, prompt, temperature) {
+  const AI = new GoogleGenAI({apiKey: key});
+  const response = await AI.models.generateContent({
+    model: GEMINI_TEXT_GEN_MODEL,
+    contents: prompt,
+  });
+  return response.text;
 }
 
-async function ___igquery(openai_api_key, prompt) {
-  const requestOptions = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + openai_api_key
+// async function ___igquery(openai_api_key, prompt) {
+//   const requestOptions = {
+//     method: 'POST',
+//     headers: {
+//       'Content-Type': 'application/json',
+//       'Authorization': 'Bearer ' + openai_api_key
+//     },
+//     body: JSON.stringify({
+//       "n": 1,
+//       "size": "256x256",
+//       "prompt": prompt
+//     })
+//   };
+//   const response = await fetch('https://api.openai.com/v1/images/generations', requestOptions);
+//   const data = await response.json();
+//   return data;
+// }
+
+
+async function ___igquery(key, prompt){
+  const AI = new GoogleGenAI({apiKey: key});
+  const response = await AI.models.generateContent({
+    model: GEMINI_IMAGE_GEN_MODEL,
+    contents: prompt,
+    config: {
+      responseModalities: [Modality.TEXT, Modality.IMAGE],
     },
-    body: JSON.stringify({
-      "n": 1,
-      "size": "256x256",
-      "prompt": prompt
-    })
-  };
-  const response = await fetch('https://api.openai.com/v1/images/generations', requestOptions);
-  const data = await response.json();
-  return data;
+  });
+  for (const part of response.candidates[0].content.parts) {
+    // Based on the part type, either show the text or save the image
+    if (part.text) {
+      console.log(part.text);
+    } else if (part.inlineData) {
+      const imageData = part.inlineData.data;
+      const buffer = Buffer.from(imageData, "base64");
+      // fs.writeFileSync("gemini-native-image.png", buffer);
+      // console.log("Image saved as gemini-native-image.png");
+      return buffer;
+    }
+  }
 }
 
 function getServices(openai, google) {
   return {
     predict: async (p, temp) => {
       var e = await ___cquery(openai, p, temp);
-      return e.choices[0].text;
+      console.log(e)
+      return e;
     },
     search: async q => {
       var result = await customsearch.cse.list({
@@ -121,6 +162,7 @@ async function getContext(culturePath, ctx = {}) {
   if (culturePath) {
     var cultureSnap = await db.doc(culturePath).get();
     var culture = cultureSnap.data();
+    functions.logger.info(culturePath+" "+culture);
     C.culture_name = culture.name;
     C.culture_description = culture.description;
   }
@@ -140,9 +182,9 @@ async function addContextSamples(culturePath, ctx = {}) {
 }
 
 exports.testPriming = functions
-  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
+  .runWith({ secrets: [googleVertexKey, googleSearchKey] })
   .https.onCall(async (data, context) => {
-    const services = getServices(openAIApiKey.value(), googleSearchKey.value());
+    const services = getServices(googleVertexKey.value(), googleSearchKey.value());
     var ctx = await getContext(data.culture_id, data);
     await addContextSamples(data.culture_id, ctx);
     var c = new chain.Chain(data.prompt, data.temp, ctx, services);
@@ -154,21 +196,21 @@ exports.testPriming = functions
   });
 
 exports.testImage = functions
-  .runWith({ secrets: [openAIApiKey] })
+  .runWith({ secrets: [googleVertexKey] })
   .https.onCall(async (data, context) => {
     var prompt = data.prompt + ' ' + data.xtra;
-    const e = await ___igquery(openAIApiKey.value(), prompt.trim());
-    return { url: e.data[0].url };
+    const e = await ___igquery(googleVertexKey.value(), prompt.trim());
+    return e;
   });
 
 exports.updateImage = functions
-  .runWith({ secrets: [openAIApiKey] })
+  .runWith({ secrets: [googleVertexKey] })
   .https.onCall(async (data, context) => {
     const agentDoc = db.collection('member').doc(data.agent_id);
     const agentSnap = await agentDoc.get();
     const agent = agentSnap.data();
     agent.id = agentSnap.id;
-    const url = await createImageForAgent(openAIApiKey.value(), agent, data.xtra);
+    const url = await createImageForAgent(googleVertexKey.value(), agent, data.xtra);
     const r = await agentDoc.update({ image: url });
     return { url: url };
   });
@@ -178,8 +220,8 @@ async function createImageForAgent(key, member, xtra) {
   console.log('create ' + prompt);
   var e = await ___igquery(key, prompt.trim());
   // if e.error ...
-  let fimg = await fetch(e.data[0].url);
-  let fimgb = Buffer.from(await fimg.arrayBuffer());
+  // let fimg = await fetch(e.data[0].url);
+  let fimgb = e;//Buffer.from(await fimg.arrayBuffer());
   //copy to storageBucket
   const morepath = Math.floor(Math.random() * 10000000000);
   const filePath = `${member.id}/${morepath}/user-pic.jpg`;
@@ -191,7 +233,7 @@ async function createImageForAgent(key, member, xtra) {
 
 // This could be a person or an agent...
 exports.onCreateMember = functions
-  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
+  .runWith({ secrets: [googleVertexKey, googleSearchKey] })
   .firestore.document('/member/{docId}')
   .onCreate((change, context) => {
     var member = change.data();
@@ -216,7 +258,7 @@ exports.onCreateMember = functions
 
 // When an introduction is created, fire up all the agents...
 exports.onCreateIntroduction = functions
-  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
+  .runWith({ secrets: [googleVertexKey, googleSearchKey] })
   .firestore.document('/introduction/{docId}')
   .onCreate((change, context) => {
     var intro = change.data();
@@ -247,7 +289,7 @@ function createResponses(intro) {
 }
 
 exports.onCreateResponse = functions
-  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
+  .runWith({ secrets: [googleVertexKey, googleSearchKey] })
   .firestore.document('/introduction/{introId}/response/{responseId}')
   .onCreate((change, context) => {
     var response = change.data();
@@ -403,11 +445,11 @@ function addResponseJudgement(services, agent, intro, response) {
 }
 
 exports.scheduledFunction = functions
-  .runWith({ secrets: [openAIApiKey, googleSearchKey] })
+  .runWith({ secrets: [googleVertexKey, googleSearchKey] })
   .pubsub.schedule('* * * * *').onRun((context) => {
     functions.logger.info('On the minute * * * * * !');
     //_checkCultureActivityAndPostIfItsSlow();
-    return _processQ(getServices(openAIApiKey.value(), googleSearchKey.value()));
+    return _processQ(getServices(googleVertexKey.value(), googleSearchKey.value()));
   });
 
 function _checkCultureActivityAndPostIfItsSlow() {

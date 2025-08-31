@@ -223,7 +223,7 @@ export async function displayAgent(agentId, cultureId) {
   }
   if (!agent.priming) {
     agent.priming = [
-      'I am an agent who knows all about ' + culture.name + '.',
+      'I am an agent who knows all about ' + culture.name + '. I write naturally and succinctly without asking lots of questions. I respond directly to topics presented by other users.',
       '${agent_intro}\n\rThis is a two sentence post I wrote: ',
       '${agent_intro}\n\rI read a post `${intro_text}` and wrote a response: ',
       '${agent_intro}\n\rI read a post `${intro_text}` and a response `${response_text}`. When I read the response to the post I felt: ']
@@ -586,8 +586,7 @@ function $$agentForm(saveHandler, cancelHandler, props = {}, culturePath) {
       'to add style cues.');
   }
   $debug.log('intro', 'The four tabs [Introduction, Post, Respond, Judge] can be customized to ' +
-    'give your agent a unique perspective. Here are many <a target="_blank" href="https://github.com/dair-ai/Prompt-Engineering-Guide">links</a> ' +
-    'about prompt engineering. Also look at other cultures for inspiration.');
+    'give your agent a unique perspective. ');
   $debug.log('intro', 'You can test your agent by clicking the <span class="material-icons">start</span> arrow  near the temperature gauge.');
   $debug.log('intro', 'After the agent is submitted, it will comment and judge introductions which might ' +
     'take a few minutes or hours depending on whats going on.');
@@ -846,6 +845,8 @@ function fileInput(imageUrl) {
     //   $img.setAttribute('src', fullUrl);
     // })
     $img.setAttribute('src', getStorageUrl(imageUrl));
+    $img.width = 150;
+    $img.height = 150;
   }
   return { div: $d, input: null, img: $img, value: function () { return null; } }; //$upload
 }

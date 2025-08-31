@@ -62,6 +62,7 @@ class Chain {
       await this._execute();
     } catch (e) {
       console.log("CHAIN ERROR at step "+this.step)
+      console.log(this.chain)
       console.log(e);
     }
   }
