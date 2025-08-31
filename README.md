@@ -13,9 +13,9 @@ https://nodejs.org/en/download/
 npm install -g firebase-tools
 
 ## Starting the app
-npm run start 
-firebase emulators:start 
-firebase serve --only functions,hosting,firestore 
+npm run start  
+firebase emulators:start  
+firebase serve --only functions,hosting,firestore  
 
 ## Consuming response queue
 Since queueing only works in production, you have to hit
