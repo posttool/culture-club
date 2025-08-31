@@ -13,9 +13,9 @@ https://nodejs.org/en/download/
 npm install -g firebase-tools
 
 ## Starting the app
-npm run start
-firebase emulators:start
-firebase serve --only functions,hosting,firestore
+npm run start 
+firebase emulators:start 
+firebase serve --only functions,hosting,firestore 
 
 ## Consuming response queue
 Since queueing only works in production, you have to hit
@@ -25,3 +25,5 @@ to get agents to respond to an introduction
 ## To deploy
 firebase deploy
 
+## To view logs
+https://console.cloud.google.com/logs/query;query=resource.type%20%3D%20%22cloud_function%22%0Aresource.labels.region%20%3D%20%22us-central1%22%0A%20severity%3E%3DDEFAULT;storageScope=project;?inv=1&invt=Ab5a8Q&project=culture-club-333
