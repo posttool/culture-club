@@ -23,9 +23,6 @@ const bucket = admin.storage().bucket();
 
 const chain = require('./chain');
 
-// const MODEL = "text-davinci-003";
-// const MODEL = "text-curie-001";
-// const MAX_AGENTS_PER_INTRO = 100;
 const STYLE = [
   'jeff koons',
   'damien hirst',
@@ -40,48 +37,9 @@ function oneOf(a) {
 exports.localUtility = functions
   .runWith({ secrets: [googleVertexKey, googleSearchKey] })
   .https.onRequest((request, response) => {
-    // getAll().then(o => { response.json(o); });
-    // _checkCultureActivityAndPostIfItsSlow();
     _processQ(getServices(googleVertexKey.value(), googleSearchKey.value()));
     response.json({ message: 'ok' });
   });
-
-// exports.getUrl = functions.https.onCall(async (data, context) => {
-//     const options = {
-//       version: 'v4',
-//       action: 'read',
-//       expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-//     };
-//     const [url] = await bucket.file(data).getSignedUrl(options);
-//     return url;
-// });
-
-// async function ___cquery(openai_api_key, prompt, temperature) {
-//   const requestOptions = {
-//     method: 'POST',
-//     headers: {
-//       'Content-Type': 'application/json',
-//       'Authorization': 'Bearer ' + openai_api_key
-//     },
-//     body: JSON.stringify({
-//       "model": MODEL,
-//       "temperature": Number(temperature),
-//       "max_tokens": 128,
-//       "top_p": 1,
-//       "frequency_penalty": 0,
-//       "presence_penalty": 0,
-//       "prompt": prompt
-//     })
-//   };
-//   const response = await fetch('https://api.openai.com/v1/completions', requestOptions);
-//   const data = await response.json();
-//   if (data.error) {
-//     console.log("ERROR");
-//     console.log(data.error);
-//   }
-//   return data;
-// }
-
 
 async function ___cquery(key, prompt, temperature) {
   const AI = new GoogleGenAI({apiKey: key});
@@ -91,25 +49,6 @@ async function ___cquery(key, prompt, temperature) {
   });
   return response.text;
 }
-
-// async function ___igquery(openai_api_key, prompt) {
-//   const requestOptions = {
-//     method: 'POST',
-//     headers: {
-//       'Content-Type': 'application/json',
-//       'Authorization': 'Bearer ' + openai_api_key
-//     },
-//     body: JSON.stringify({
-//       "n": 1,
-//       "size": "256x256",
-//       "prompt": prompt
-//     })
-//   };
-//   const response = await fetch('https://api.openai.com/v1/images/generations', requestOptions);
-//   const data = await response.json();
-//   return data;
-// }
-
 
 async function ___igquery(key, prompt){
   const AI = new GoogleGenAI({apiKey: key});
@@ -127,8 +66,6 @@ async function ___igquery(key, prompt){
     } else if (part.inlineData) {
       const imageData = part.inlineData.data;
       const buffer = Buffer.from(imageData, "base64");
-      // fs.writeFileSync("gemini-native-image.png", buffer);
-      // console.log("Image saved as gemini-native-image.png");
       return buffer;
     }
   }
@@ -536,8 +473,6 @@ function promptAgents(culturePath) {
       });
   });
 }
-
-
 
 async function _queue(fname, data) {
   var qDoc = await db.collection('service-queue').add({
